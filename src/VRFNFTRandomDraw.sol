@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {OwnableUpgradeable} from "./Ownable/OwnableUpgradeable.sol";
 import {IERC721EnumerableUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/IERC721EnumerableUpgradeable.sol";
 
 import "@chainlink/contracts/src/v0.8/VRFConsumerBaseV2.sol";
@@ -12,9 +12,9 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
 
     struct Settings {
         IERC721EnumerableUpgradeable token;
+        IERC721EnumerableUpgradeable drawingToken;
+        uint256 drawingTokenStartId;
         uint256 tokenId;
-        uint256 numberApplicants;
-        uint256 drawTimelock;
         uint256 drawBufferTime;
         uint256 numberTokens;
         uint256 recoverTimelock;
@@ -28,6 +28,7 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
         uint256 currentChainlinkRequestId;
         uint256 currentChosenRandomNumber;
         bool hasChosenRandomNumber;
+        uint256 drawTimelock;
     }
     CurrentRequest public request;
 
@@ -45,7 +46,7 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
     error NEEDS_TO_HAVE_CHOSEN_A_NUMBER();
     error OWNER_RECLAIMED_UNCLAIMED_NFT();
 
-    error WITHDRAW_TIMELOCK_NEEDS_TO_BE_AT_LEAST_A_DAY();
+    error WITHDRAW_TIMELOCK_NEEDS_TO_BE_AT_LEAST_AN_HOUR();
     error RECOVER_TIMELOCK_NEEDS_TO_BE_AT_LEAST_A_WEEK();
     error USER_HAS_NOT_WON();
     error TOO_SOON_TO_REDRAW();
@@ -70,13 +71,16 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
         coordinator = _coordinator;
     }
 
-    function initialize(Settings memory _settings) public initializer {
+    function initialize(address admin, Settings memory _settings)
+        public
+        initializer
+    {
         // Set new settings
         settings = _settings;
 
         // Check values in memory:
-        if (_settings.drawTimelock < 3600 * 24) {
-            revert WITHDRAW_TIMELOCK_NEEDS_TO_BE_AT_LEAST_A_DAY();
+        if (_settings.drawBufferTime < 60 * 60) {
+            revert WITHDRAW_TIMELOCK_NEEDS_TO_BE_AT_LEAST_AN_HOUR();
         }
 
         if (_settings.recoverTimelock != 0) {
@@ -97,7 +101,7 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
             revert TOKEN_BEING_OFFERED_NEEDS_TO_EXIST();
         }
 
-        try _settings.token.totalSupply() returns (uint256 supply) {
+        try _settings.drawingToken.totalSupply() returns (uint256 supply) {
             if (supply != _settings.numberTokens) {
                 revert SUPPLY_TOKENS_COUNT_WRONG();
             }
@@ -105,7 +109,7 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
             // If not supported, user will verify count.
         }
 
-        __Ownable_init();
+        __Ownable_init(admin);
 
         emit InitializedDraw(msg.sender, settings);
     }
@@ -122,14 +126,14 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
         if (
             request.hasChosenRandomNumber &&
             // Draw timelock not yet used
-            settings.drawTimelock != 0 &&
-            settings.drawTimelock < block.timestamp
+            request.drawTimelock != 0 &&
+            request.drawTimelock > block.timestamp
         ) {
             revert STILL_IN_WAITING_PERIOD_BEFORE_REDRAWING();
         }
 
         // Setup re-draw timelock
-        settings.drawTimelock = block.timestamp + settings.drawBufferTime;
+        request.drawTimelock = block.timestamp + settings.drawBufferTime;
 
         // Request first random round
         request.currentChainlinkRequestId = coordinator.requestRandomWords({
@@ -141,7 +145,7 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
         });
     }
 
-    function startDraw() external onlyOwner {
+    function startDraw() external onlyOwner returns (uint256) {
         try
             settings.token.transferFrom(
                 msg.sender,
@@ -155,10 +159,12 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
         emit SetupDraw(msg.sender, settings);
 
         _requestRoll();
+
+        return request.currentChainlinkRequestId;
     }
 
-    function redraw() external onlyOwner {
-        if (settings.drawTimelock < block.timestamp) {
+    function redraw() external onlyOwner returns (uint256) {
+        if (request.drawTimelock >= block.timestamp) {
             revert TOO_SOON_TO_REDRAW();
         }
 
@@ -166,6 +172,8 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
         delete request;
 
         _requestRoll();
+
+        return request.currentChainlinkRequestId;
     }
 
     function fulfillRandomWords(
@@ -215,13 +223,17 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
         }
 
         return
-            user == settings.token.ownerOf(request.currentChosenRandomNumber);
+            user ==
+            settings.drawingToken.ownerOf(
+                (request.currentChosenRandomNumber % settings.numberTokens) +
+                    settings.drawingTokenStartId
+            );
     }
 
     function lastResortTimelockOwnerClaimNFT() external onlyOwner {
         if (
             settings.recoverTimelock == 0 ||
-            settings.recoverTimelock < block.timestamp
+            settings.recoverTimelock > block.timestamp
         ) {
             revert RECOVERY_IS_NOT_YET_POSSIBLE();
         }

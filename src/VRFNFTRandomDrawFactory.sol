@@ -15,9 +15,14 @@ contract VRFNFTRandomDrawFactory {
         implementation = _implementation;
     }
 
-    function makeNewDraw(VRFNFTRandomDraw.Settings memory settings) external {
+    function makeNewDraw(VRFNFTRandomDraw.Settings memory settings)
+        external
+        returns (address)
+    {
+        address admin = msg.sender;
         address newDrawing = ClonesUpgradeable.clone(implementation);
-        VRFNFTRandomDraw(newDrawing).initialize(settings);
-        emit SetupNewDrawing(msg.sender, newDrawing);
+        VRFNFTRandomDraw(newDrawing).initialize(admin, settings);
+        emit SetupNewDrawing(admin, newDrawing);
+        return newDrawing;
     }
 }
