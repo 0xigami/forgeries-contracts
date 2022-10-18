@@ -6,6 +6,7 @@ import {VRFNFTRandomDraw} from "../src/VRFNFTRandomDraw.sol";
 import {VRFNFTRandomDrawFactory} from "../src/VRFNFTRandomDrawFactory.sol";
 
 import {VRFCoordinatorV2Mock} from "@chainlink/contracts/src/v0.8/mocks/VRFCoordinatorV2Mock.sol";
+import {IOwnableUpgradeable} from "../src/Ownable/IOwnableUpgradeable.sol";
 
 import {IERC721EnumerableUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/IERC721EnumerableUpgradeable.sol";
 
@@ -27,7 +28,7 @@ contract VRFNFTRandomDrawTest is Test {
 
     VRFNFTRandomDraw currentDraw;
 
-    function setupDrawing() public {
+    function setupDrawing() internal {
         vm.label(user, "USER");
         vm.label(admin, "ADMIN");
 
@@ -170,5 +171,129 @@ contract VRFNFTRandomDrawTest is Test {
         // should be able to call nft
         assertEq(targetNFT.balanceOf(admin), 1);
         assertEq(targetNFT.balanceOf(consumerAddress), 0);
+    }
+
+    function test_LoserCannotWithdraw() public {
+        setupDrawing();
+
+        address winner = address(0x1337);
+        vm.label(winner, "winner");
+
+        address loser = address(0x019);
+        vm.label(loser, "loser");
+
+        vm.startPrank(winner);
+        for (uint256 tokensCount = 0; tokensCount < 10; tokensCount++) {
+            drawingNFT.mint();
+        }
+        vm.stopPrank();
+
+        vm.startPrank(loser);
+        for (uint256 tokensCount = 0; tokensCount < 80; tokensCount++) {
+            drawingNFT.mint();
+        }
+        vm.stopPrank();
+
+        vm.startPrank(admin);
+        targetNFT.mint();
+
+        address consumerAddress = factory.makeNewDraw(
+            VRFNFTRandomDraw.Settings({
+                token: IERC721EnumerableUpgradeable(address(targetNFT)),
+                tokenId: 0,
+                drawingToken: IERC721EnumerableUpgradeable(address(drawingNFT)),
+                drawingTokenStartId: 0,
+                drawBufferTime: 1 hours,
+                recoverTimelock: 2 weeks,
+                numberTokens: 90,
+                keyHash: bytes32(
+                    0x79d3d8832d904592c0bf9818b621522c988bb8b0c05cdc3b15aea1b6e8db0c15
+                ),
+                subscriptionId: subscriptionId
+            })
+        );
+        vm.label(consumerAddress, "drawing instance");
+
+        mockCoordinator.addConsumer(subscriptionId, consumerAddress);
+        mockCoordinator.fundSubscription(subscriptionId, 100 ether);
+
+        VRFNFTRandomDraw drawing = VRFNFTRandomDraw(consumerAddress);
+
+        vm.stopPrank();
+
+        vm.prank(loser);
+        vm.expectRevert();
+        drawing.winnerClaimNFT();
+
+        vm.prank(admin);
+        targetNFT.setApprovalForAll(consumerAddress, true);
+
+        vm.prank(admin);
+        uint256 drawingId = drawing.startDraw();
+
+        vm.prank(loser);
+        vm.expectRevert();
+        drawing.winnerClaimNFT();
+
+        mockCoordinator.fulfillRandomWords(drawingId, consumerAddress);
+
+        vm.prank(loser);
+        vm.expectRevert();
+
+        vm.prank(admin);
+        drawing.winnerClaimNFT();
+
+        assertEq(targetNFT.balanceOf(admin), 0);
+        assertEq(targetNFT.balanceOf(consumerAddress), 1);
+
+        vm.stopPrank();
+        vm.prank(loser);
+        vm.expectRevert(IOwnableUpgradeable.ONLY_OWNER.selector);
+        drawing.lastResortTimelockOwnerClaimNFT();
+
+        // should be able to call nft
+        assertEq(targetNFT.balanceOf(admin), 1);
+        assertEq(targetNFT.balanceOf(consumerAddress), 0);
+    }
+
+    function test_NFTNotApproved() public {
+        setupDrawing();
+
+        address winner = address(0x1337);
+        vm.label(winner, "winner");
+
+        vm.startPrank(winner);
+        for (uint256 tokensCount = 0; tokensCount < 10; tokensCount++) {
+            drawingNFT.mint();
+        }
+        vm.stopPrank();
+
+        vm.startPrank(admin);
+        targetNFT.mint();
+
+        address consumerAddress = factory.makeNewDraw(
+            VRFNFTRandomDraw.Settings({
+                token: IERC721EnumerableUpgradeable(address(targetNFT)),
+                tokenId: 0,
+                drawingToken: IERC721EnumerableUpgradeable(address(drawingNFT)),
+                drawingTokenStartId: 0,
+                drawBufferTime: 1 hours,
+                recoverTimelock: 2 weeks,
+                numberTokens: 10,
+                keyHash: bytes32(
+                    0x79d3d8832d904592c0bf9818b621522c988bb8b0c05cdc3b15aea1b6e8db0c15
+                ),
+                subscriptionId: subscriptionId
+            })
+        );
+        vm.label(consumerAddress, "drawing instance");
+
+        mockCoordinator.addConsumer(subscriptionId, consumerAddress);
+        mockCoordinator.fundSubscription(subscriptionId, 100 ether);
+
+        VRFNFTRandomDraw drawing = VRFNFTRandomDraw(consumerAddress);
+
+        vm.expectRevert();
+        uint256 drawingId = drawing.startDraw();
     }
 }
