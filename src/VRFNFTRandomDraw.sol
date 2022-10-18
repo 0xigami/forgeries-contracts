@@ -7,57 +7,102 @@ import {IERC721EnumerableUpgradeable} from "@openzeppelin/contracts-upgradeable/
 import "@chainlink/contracts/src/v0.8/VRFConsumerBaseV2.sol";
 import "@chainlink/contracts/src/v0.8/VRFCoordinatorV2.sol";
 
+/// @notice VRFNFTRandom Draw with NFT Tickets
+/// @author @isiain
+/// @dev CODE IS UNAUDITED and UNDER DEVELOPMENT
+/// @dev USE AT YOUR OWN RICK
 contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
+    /// @notice Reference to chain-specific coordinator contract
     VRFCoordinatorV2Interface immutable coordinator;
 
+    /// @notice Struct to organize user settings
     struct Settings {
+        /// @notice Token Contract to put up for raffle
         IERC721EnumerableUpgradeable token;
-        IERC721EnumerableUpgradeable drawingToken;
-        uint256 drawingTokenStartId;
+        /// @notice Token ID to put up for raffle
         uint256 tokenId;
+        /// @notice Token that each (sequential) ID has a entry in the raffle.
+        IERC721EnumerableUpgradeable drawingToken;
+        /// @notice Start token ID for the drawing (if totalSupply = 20 but the first token is 5 (5-25), setting this to 5 would fix the ordering)
+        uint256 drawingTokenStartId;
+        /// @notice Draw buffer time – time until a re-drawing can occur if the selected user cannot or does not claim the NFT.
         uint256 drawBufferTime;
+        /// @notice Number of tokens that can be drawn from, should match totalSupply
         uint256 numberTokens;
+        /// @notice block.timestamp that the admin can recover the NFT (as a safety fallback)
         uint256 recoverTimelock;
+        /// @notice Chainlink gas keyhash
         bytes32 keyHash;
+        /// @notice Chainlink subscription id
         uint64 subscriptionId;
     }
 
+    /// @notice Settings used for the contract.
     Settings public settings;
 
+    /// @notice Struct to organize current request 
     struct CurrentRequest {
+        /// @notice current chainlink request id
         uint256 currentChainlinkRequestId;
+        /// @notice current chosen random number
         uint256 currentChosenRandomNumber;
+        /// @notice has chosen a random number (in case random number = 0(in case random number = 0)(in case random number = 0)(in case random number = 0)(in case random number = 0)(in case random number = 0)(in case random number = 0)(in case random number = 0)(in case random number = 0))
         bool hasChosenRandomNumber;
+        /// @notice time lock (block.timestamp) that a re-draw can be issued
         uint256 drawTimelock;
     }
+
+    /// @notice Details about the current request to chainlink 
     CurrentRequest public request;
 
-    uint32 constant callbackGasLimit = 100_000;
+    /// @notice Our callback is just setting a few variables, 200k should be more than enough gas.
+    uint32 constant callbackGasLimit = 200_000;
+    /// @notice Chainlink request confirmations, left at the default @todo figure out what the correct value is here
     uint16 constant requestConfirmations = 3;
 
+    /// @notice Cannot redraw during waiting period
     error STILL_IN_WAITING_PERIOD_BEFORE_REDRAWING();
+    /// @notice Admin emergency withdraw can only happen once unlocked
     error WITHDRAW_TIMELOCK_NEEDS_TO_BE_IN_FUTURE();
+    /// @notice Token that is offered does not exist with ownerOf
     error TOKEN_BEING_OFFERED_NEEDS_TO_EXIST();
+    /// @notice Token cannot be at zero address
     error TOKEN_CANNOT_BE_ZERO_ADDRESS();
+    /// @notice Token needs to be approved to raffle contract
     error TOKEN_NEEDS_TO_BE_APPROVED_TO_CONTRACT();
+    /// @notice Waiting on a response from chainlink
     error REQUEST_IN_FLIGHT();
+    /// @notice Chainlink VRF response doesn't match current ID
     error REQUEST_DOES_NOT_MATCH_CURRENT_ID();
+    /// @notice The tokens' totalSupply doesn't match one claimed on contract
     error SUPPLY_TOKENS_COUNT_WRONG();
+    /// @notice Cannot attempt to claim winnings if request is not started or in flight
     error NEEDS_TO_HAVE_CHOSEN_A_NUMBER();
-    error OWNER_RECLAIMED_UNCLAIMED_NFT();
 
+    /// @notice Withdraw timelock min is 1 hour
     error WITHDRAW_TIMELOCK_NEEDS_TO_BE_AT_LEAST_AN_HOUR();
+    /// @notice Admin NFT recovery timelock min is 1 week
     error RECOVER_TIMELOCK_NEEDS_TO_BE_AT_LEAST_A_WEEK();
+    /// @notice The given user has not won
     error USER_HAS_NOT_WON();
+    /// @notice Cannot re-draw yet
     error TOO_SOON_TO_REDRAW();
+    /// @notice NFT for raffle is not owned by the admin
     error DO_NOT_OWN_NFT();
+    /// @notice Recovery is too early
     error RECOVERY_IS_NOT_YET_POSSIBLE();
+    /// @notice Too many / few random words are sent back from chainlink
     error WRONG_LENGTH_FOR_RANDOM_WORDS();
 
+    /// @notice When the draw is initialized
     event InitializedDraw(address indexed sender, Settings settings);
+    /// @notice When the draw is setup
     event SetupDraw(address indexed sender, Settings settings);
+    /// @notice When the owner reclaims nft aftr recovery time delay
     event OwnerReclaimedNFT(address indexed owner);
+    /// @notice Dice roll is complete from callback
     event DiceRollComplete(address indexed sender, CurrentRequest request);
+    /// @notice Sent when the winner sends/claims an NFT
     event WinnerSentNFT(
         address indexed winner,
         address indexed nft,
@@ -65,12 +110,16 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
         Settings settings
     );
 
+    /// @dev Save the coordiantor to the contract
     constructor(VRFCoordinatorV2Interface _coordinator)
         VRFConsumerBaseV2(address(_coordinator))
     {
         coordinator = _coordinator;
     }
 
+    /// @notice Initialize the contract with settings and an amind
+    /// @param admin initial admin
+    /// @param _settings initial settings
     function initialize(address admin, Settings memory _settings)
         public
         initializer
@@ -114,6 +163,7 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
         emit InitializedDraw(msg.sender, settings);
     }
 
+    /// @notice Internal function to request entropy 
     function _requestRoll() internal {
         if (settings.token.ownerOf(settings.tokenId) != address(this)) {
             revert DO_NOT_OWN_NFT();
@@ -145,6 +195,8 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
         });
     }
 
+    /// @notice Call this to start the raffle drawing
+    /// @return chainlink request id
     function startDraw() external onlyOwner returns (uint256) {
         try
             settings.token.transferFrom(
@@ -163,6 +215,8 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
         return request.currentChainlinkRequestId;
     }
 
+    /// @notice Call this to re-draw the raffle
+    /// @return chainlink request id
     function redraw() external onlyOwner returns (uint256) {
         if (request.drawTimelock >= block.timestamp) {
             revert TOO_SOON_TO_REDRAW();
