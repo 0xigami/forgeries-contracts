@@ -2,7 +2,8 @@
 pragma solidity ^0.8.13;
 
 import {OwnableUpgradeable} from "./Ownable/OwnableUpgradeable.sol";
-import {IERC721EnumerableUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/IERC721EnumerableUpgradeable.sol";
+import {IERC721Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC721/IERC721Upgradeable.sol";
+import {MerkleProofUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/cryptography/MerkleProofUpgradeable.sol";
 
 import "@chainlink/contracts/src/v0.8/VRFConsumerBaseV2.sol";
 import "@chainlink/contracts/src/v0.8/VRFCoordinatorV2.sol";
@@ -11,22 +12,28 @@ import "@chainlink/contracts/src/v0.8/VRFCoordinatorV2.sol";
 /// @author @isiain
 /// @dev CODE IS UNAUDITED and UNDER DEVELOPMENT
 /// @dev USE AT YOUR OWN RICK
-contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
+contract VRFMerkleRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
     /// @notice Reference to chain-specific coordinator contract
     VRFCoordinatorV2Interface immutable coordinator;
+
+    /// @notice Struct to store the current merkle information
+    struct MerkleInfo {
+        /// @notice Link to the merkle leaves on IPFS
+        string drawingsMerkleTreeIPFS;
+        /// @notice Token that each (sequential) ID has a entry in the raffle.
+        bytes32 drawingsMerkleRoot;
+        /// @notice Number of entries in the drawing merkle root
+        uint256 drawingsMerkleEntries;
+    }
 
     /// @notice Struct to organize user settings
     struct Settings {
         /// @notice Token Contract to put up for raffle
-        IERC721EnumerableUpgradeable token;
+        IERC721 token;
         /// @notice Token ID to put up for raffle
         uint256 tokenId;
-        /// @notice Token that each (sequential) ID has a entry in the raffle.
-        IERC721EnumerableUpgradeable drawingToken;
-        /// @notice Start token ID for the drawing (if totalSupply = 20 but the first token is 5 (5-25), setting this to 5 would fix the ordering)
-        uint256 drawingTokenStartId;
-        /// @notice End token ID for the drawing (exclusive) (token ids 0 - 9 would be 10 in this field)
-        uint256 drawingTokenEndId;
+        /// @notice Drawing merkle information
+        MerkleInfo merkle;
         /// @notice Draw buffer time – time until a re-drawing can occur if the selected user cannot or does not claim the NFT.
         uint256 drawBufferTime;
         /// @notice block.timestamp that the admin can recover the NFT (as a safety fallback)
@@ -45,7 +52,7 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
         /// @notice current chainlink request id
         uint256 currentChainlinkRequestId;
         /// @notice current chosen random number
-        uint256 currentChosenTokenId;
+        uint256 currentChosenLeafId;
         /// @notice has chosen a random number (in case random number = 0(in case random number = 0)(in case random number = 0)(in case random number = 0)(in case random number = 0)(in case random number = 0)(in case random number = 0)(in case random number = 0)(in case random number = 0))
         bool hasChosenRandomNumber;
         /// @notice time lock (block.timestamp) that a re-draw can be issued
@@ -200,6 +207,7 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
     /// @notice Internal function to request entropy
     function _requestRoll() internal {
         // Owner of token to raffle needs to be this contract
+        // This will fail once the winning NFT is transferred out of the contract.
         if (settings.token.ownerOf(settings.tokenId) != address(this)) {
             revert DOES_NOT_OWN_NFT();
         }
@@ -299,33 +307,57 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
         // Set request details
         request.hasChosenRandomNumber = true;
         // Get total token range
-        uint256 tokenRange = settings.drawingTokenEndId -
-            settings.drawingTokenStartId;
         // Store a number from it here (reduce number here to reduce gas usage)
-        request.currentChosenTokenId =
-            (_randomWords[0] % tokenRange) +
-            settings.drawingTokenStartId;
+        request.currentChosenLeafId =
+            _randomWords[0] %
+            settings.merkle.drawingsMerkleEntries;
 
         // Emit indexer event
         emit DiceRollComplete(msg.sender, request);
     }
 
-    function hasUserWon(address user) public view returns (bool) {
+    /// @notice Function to determine if the user has won based on their proof and user address
+    /// @param user user to determine if they have won
+    /// @param merkleProof to use to determine winning
+    function hasUserWon(address user, bytes32[] calldata merkleProof)
+        public
+        view
+        returns (bool)
+    {
         if (!request.hasChosenRandomNumber) {
             revert NEEDS_TO_HAVE_CHOSEN_A_NUMBER();
         }
 
-        return
-            user == settings.drawingToken.ownerOf(request.currentChosenTokenId);
+        bool verified = MerkleProofUpgradeable.verifyCalldata(
+            merkleProof,
+            settings.merkle.drawingsMerkleRoot,
+            keccak256(
+                abi.encode(
+                    msg.sender,
+                    request.currentChosenLeafId,
+                    request.merkle.drawingsMerkleEntries
+                )
+            )
+        );
+        return (verified && atIndex == request.currentChosenLeafId);
     }
 
     /// @notice Function for the winner to call to retrieve their NFT
-    function winnerClaimNFT() external {
+    function winnerClaimNFT(bytes32[] calldata merkleProof, uint256 totalCount)
+        external
+    {
         // Assume (potential) winner calls this fn, cache.
         address user = msg.sender;
 
         // Check if this user has indeed won.
-        if (!hasUserWon(user)) {
+        if (
+            !hasUserWon(
+                user,
+                merkleProof,
+                request.currentChosenLeafId,
+                request.merkle.drawingsMerkleEntries
+            )
+        ) {
             revert USER_HAS_NOT_WON();
         }
 
@@ -361,5 +393,17 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
 
         // Send event for indexing that the owner reclaimed the NFT
         emit OwnerReclaimedNFT(owner());
+    }
+
+    /// @notice Function to admin recover NFTs acidentally sent to contract
+    /// @param nft address of nft contract to recover
+    /// @param tokenId of nft to recover
+    /// @dev Doesn't allow reclaiming contest NFT
+    function adminRecoverNFT(address nft, uint256 tokenId) external onlyOwner {
+        if (settings.token == nft && settings.tokenId == tokenId) {
+            revert NOT_ALLOWED_RECOVER_CONTEST_NFT();
+        }
+
+        IERC721(token).transferFrom(address(this), owner(), tokenId);
     }
 }
