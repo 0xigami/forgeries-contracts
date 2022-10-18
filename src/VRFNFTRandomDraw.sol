@@ -25,10 +25,10 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
         IERC721EnumerableUpgradeable drawingToken;
         /// @notice Start token ID for the drawing (if totalSupply = 20 but the first token is 5 (5-25), setting this to 5 would fix the ordering)
         uint256 drawingTokenStartId;
+        /// @notice End token ID for the drawing (exclusive) (token ids 0 - 9 would be 10 in this field)
+        uint256 drawingTokenEndId;
         /// @notice Draw buffer time – time until a re-drawing can occur if the selected user cannot or does not claim the NFT.
         uint256 drawBufferTime;
-        /// @notice Number of tokens that can be drawn from, should match totalSupply
-        uint256 numberTokens;
         /// @notice block.timestamp that the admin can recover the NFT (as a safety fallback)
         uint256 recoverTimelock;
         /// @notice Chainlink gas keyhash
@@ -81,6 +81,8 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
     /// @notice Cannot attempt to claim winnings if request is not started or in flight
     error NEEDS_TO_HAVE_CHOSEN_A_NUMBER();
 
+    /// @notice When the range is [20,0] (from 20 to 0, that doesn't make sense)
+    error DRAWING_TOKEN_RANGE_INVALID();
     /// @notice Withdraw timelock min is 1 hour
     error WITHDRAW_TIMELOCK_NEEDS_TO_BE_AT_LEAST_AN_HOUR();
     /// @notice Admin NFT recovery timelock min is 1 week
@@ -172,17 +174,21 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
             revert TOKEN_BEING_OFFERED_NEEDS_TO_EXIST();
         }
 
-        // Ensure the total supply is as expected
-        try _settings.drawingToken.totalSupply() returns (uint256 supply) {
-            // If unset, set to totalSupply
-            if (_settings.numberTokens == 0) {
-                settings.numberTokens = supply;
-            } else if (supply != _settings.numberTokens) {
-                revert SUPPLY_TOKENS_COUNT_WRONG();
-            }
-        } catch {
-            // If not supported, user will verify count.
+        if (_settings.drawingTokenEndId < _settings.drawingTokenStartId) {
+            revert DRAWING_TOKEN_RANGE_INVALID();
         }
+        // TODO(iain): Re-evaluate regarding burned tokens
+        // // Ensure the total supply is as expected
+        // try _settings.drawingToken.totalSupply() returns (uint256 supply) {
+        //     // If unset, set to totalSupply
+        //     if (_settings.numberTokens == 0) {
+        //         settings.numberTokens = supply;
+        //     } else if (supply != _settings.numberTokens) {
+        //         revert SUPPLY_TOKENS_COUNT_WRONG();
+        //     }
+        // } catch {
+        //     // If not supported, user will verify count.
+        // }
 
         // Setup owner as admin
         __Ownable_init(admin);
@@ -292,8 +298,12 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
 
         // Set request details
         request.hasChosenRandomNumber = true;
+        // Get total token range
+        uint256 tokenRange = settings.drawingTokenEndId -
+            settings.drawingTokenStartId;
+        // Store a number from it here (reduce number here to reduce gas usage)
         request.currentChosenTokenId =
-            (_randomWords[0] % settings.numberTokens) +
+            (_randomWords[0] % tokenRange) +
             settings.drawingTokenStartId;
 
         // Emit indexer event

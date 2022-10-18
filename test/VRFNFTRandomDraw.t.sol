@@ -71,9 +71,9 @@ contract VRFNFTRandomDrawTest is Test {
                 tokenId: 0,
                 drawingToken: IERC721EnumerableUpgradeable(address(drawingNFT)),
                 drawingTokenStartId: 0,
+                drawingTokenEndId: 10,
                 drawBufferTime: 1 hours,
                 recoverTimelock: 2 weeks,
-                numberTokens: 10,
                 keyHash: bytes32(
                     0x79d3d8832d904592c0bf9818b621522c988bb8b0c05cdc3b15aea1b6e8db0c15
                 ),
@@ -126,9 +126,9 @@ contract VRFNFTRandomDrawTest is Test {
                 tokenId: 0,
                 drawingToken: IERC721EnumerableUpgradeable(address(drawingNFT)),
                 drawingTokenStartId: 0,
+                drawingTokenEndId: 10,
                 drawBufferTime: 1 hours,
                 recoverTimelock: 2 weeks,
-                numberTokens: 10,
                 keyHash: bytes32(
                     0x79d3d8832d904592c0bf9818b621522c988bb8b0c05cdc3b15aea1b6e8db0c15
                 ),
@@ -203,9 +203,9 @@ contract VRFNFTRandomDrawTest is Test {
                 tokenId: 0,
                 drawingToken: IERC721EnumerableUpgradeable(address(drawingNFT)),
                 drawingTokenStartId: 0,
+                drawingTokenEndId: 90,
                 drawBufferTime: 1 hours,
                 recoverTimelock: 2 weeks,
-                numberTokens: 90,
                 keyHash: bytes32(
                     0x79d3d8832d904592c0bf9818b621522c988bb8b0c05cdc3b15aea1b6e8db0c15
                 ),
@@ -277,9 +277,9 @@ contract VRFNFTRandomDrawTest is Test {
                 tokenId: 0,
                 drawingToken: IERC721EnumerableUpgradeable(address(drawingNFT)),
                 drawingTokenStartId: 0,
+                drawingTokenEndId: 10,
                 drawBufferTime: 1 hours,
                 recoverTimelock: 2 weeks,
-                numberTokens: 10,
                 keyHash: bytes32(
                     0x79d3d8832d904592c0bf9818b621522c988bb8b0c05cdc3b15aea1b6e8db0c15
                 ),
