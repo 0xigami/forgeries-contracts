@@ -148,7 +148,7 @@ contract VRFNFTRandomDrawTest is Test {
 
         mockCoordinator.fulfillRandomWords(drawingId, consumerAddress);
 
-        (, , , uint256 drawTimelock) = drawing.request();
+        (, , uint256 drawTimelock) = drawing.getRequestDetails();
         assertEq(drawTimelock, 3601);
         assertEq(block.timestamp, 1);
 
