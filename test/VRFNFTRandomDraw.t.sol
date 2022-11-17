@@ -1,17 +1,18 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.13;
+pragma solidity 0.8.16;
 
 import "forge-std/Test.sol";
+
+import {VRFCoordinatorV2Mock} from "@chainlink/contracts/src/v0.8/mocks/VRFCoordinatorV2Mock.sol";
 import {VRFNFTRandomDraw} from "../src/VRFNFTRandomDraw.sol";
 import {VRFNFTRandomDrawFactory} from "../src/VRFNFTRandomDrawFactory.sol";
 
-import {VRFCoordinatorV2Mock} from "@chainlink/contracts/src/v0.8/mocks/VRFCoordinatorV2Mock.sol";
 import {IOwnableUpgradeable} from "../src/Ownable/IOwnableUpgradeable.sol";
 
 import {IERC721EnumerableUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/IERC721EnumerableUpgradeable.sol";
 
-import {MockNFT} from "./MockNFT.sol";
-import {MockERC20} from "./MockERC20.sol";
+import {MockNFT} from "./mocks/MockNFT.sol";
+import {MockERC20} from "./mocks/MockERC20.sol";
 
 contract VRFNFTRandomDrawTest is Test {
     MockNFT targetNFT;

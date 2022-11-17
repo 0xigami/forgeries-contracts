@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.13;
+pragma solidity 0.8.16;
 
 import {OwnableUpgradeable} from "./Ownable/OwnableUpgradeable.sol";
 import {IERC721EnumerableUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/IERC721EnumerableUpgradeable.sol";
 
-import "@chainlink/contracts/src/v0.8/VRFConsumerBaseV2.sol";
-import "@chainlink/contracts/src/v0.8/VRFCoordinatorV2.sol";
+import {VRFConsumerBaseV2} from "@chainlink/contracts/src/v0.8/VRFConsumerBaseV2.sol";
+import {VRFCoordinatorV2, VRFCoordinatorV2Interface} from "@chainlink/contracts/src/v0.8/VRFCoordinatorV2.sol";
 
 /// @notice VRFNFTRandom Draw with NFT Tickets
 /// @author @isiain
@@ -114,9 +114,10 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
         Settings settings
     );
 
-    /// @dev Save the coordiantor to the contract
+    /// @dev Save the coordinator to the contract
     constructor(VRFCoordinatorV2Interface _coordinator)
         VRFConsumerBaseV2(address(_coordinator))
+        initializer
     {
         coordinator = _coordinator;
     }
@@ -124,6 +125,7 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
     /// @notice Getter for request details, does not include picked tokenID
     function getRequestDetails()
         external
+        view
         returns (
             uint256 currentChainlinkRequestId,
             bool hasChosenRandomNumber,
@@ -135,7 +137,7 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
         drawTimelock = request.drawTimelock;
     }
 
-    /// @notice Initialize the contract with settings and an amind
+    /// @notice Initialize the contract with settings and an admin
     /// @param admin initial admin
     /// @param _settings initial settings
     function initialize(address admin, Settings memory _settings)
@@ -174,21 +176,10 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
             revert TOKEN_BEING_OFFERED_NEEDS_TO_EXIST();
         }
 
+        // Validate token range
         if (_settings.drawingTokenEndId < _settings.drawingTokenStartId) {
             revert DRAWING_TOKEN_RANGE_INVALID();
         }
-        // TODO(iain): Re-evaluate regarding burned tokens
-        // // Ensure the total supply is as expected
-        // try _settings.drawingToken.totalSupply() returns (uint256 supply) {
-        //     // If unset, set to totalSupply
-        //     if (_settings.numberTokens == 0) {
-        //         settings.numberTokens = supply;
-        //     } else if (supply != _settings.numberTokens) {
-        //         revert SUPPLY_TOKENS_COUNT_WRONG();
-        //     }
-        // } catch {
-        //     // If not supported, user will verify count.
-        // }
 
         // Setup owner as admin
         __Ownable_init(admin);
@@ -298,9 +289,18 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
 
         // Set request details
         request.hasChosenRandomNumber = true;
+
         // Get total token range
         uint256 tokenRange = settings.drawingTokenEndId -
             settings.drawingTokenStartId;
+        
+        // uint256 checkLoopLimit = 0;
+        // uint256 entropyNumber = _randomWords[0];
+
+        // for (; bitIndex < 8 && entropyNumber > 0; ++bitIndex) {
+        //     if (entropyNumber << bitIndex)
+        // }
+
         // Store a number from it here (reduce number here to reduce gas usage)
         request.currentChosenTokenId =
             (_randomWords[0] % tokenRange) +
