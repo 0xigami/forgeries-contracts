@@ -16,17 +16,23 @@ contract SetupContractsScript is Script {
     }
 
     function run() public {
-        vm.broadcast();
-        VRFNFTRandomDraw drawImpl = new VRFNFTRandomDraw(VRFCoordinatorV2Interface(coordinatorAddress));
+        vm.startBroadcast();
+
+        VRFNFTRandomDraw drawImpl = new VRFNFTRandomDraw(
+            VRFCoordinatorV2Interface(coordinatorAddress)
+        );
+
         VRFNFTRandomDrawFactory factory = new VRFNFTRandomDrawFactory(
             address(drawImpl)
         );
+
+        vm.stopBroadcast();
+
 
         console2.log("Factory: ");
         console2.log(address(factory));
         console2.log("Draw Impl: ");
         console2.log(address(drawImpl));
-        vm.stopBroadcast();
         vm.label(address(factory), "factory");
     }
 }

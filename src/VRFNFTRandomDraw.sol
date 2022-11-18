@@ -9,8 +9,6 @@ import {VRFCoordinatorV2, VRFCoordinatorV2Interface} from "@chainlink/contracts/
 
 /// @notice VRFNFTRandom Draw with NFT Tickets
 /// @author @isiain
-/// @dev CODE IS UNAUDITED and UNDER DEVELOPMENT
-/// @dev USE AT YOUR OWN RICK
 contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
     /// @notice Reference to chain-specific coordinator contract
     VRFCoordinatorV2Interface immutable coordinator;
@@ -18,11 +16,11 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
     /// @notice Struct to organize user settings
     struct Settings {
         /// @notice Token Contract to put up for raffle
-        IERC721EnumerableUpgradeable token;
+        address token;
         /// @notice Token ID to put up for raffle
         uint256 tokenId;
         /// @notice Token that each (sequential) ID has a entry in the raffle.
-        IERC721EnumerableUpgradeable drawingToken;
+        address drawingToken;
         /// @notice Start token ID for the drawing (if totalSupply = 20 but the first token is 5 (5-25), setting this to 5 would fix the ordering)
         uint256 drawingTokenStartId;
         /// @notice End token ID for the drawing (exclusive) (token ids 0 - 9 would be 10 in this field)
@@ -56,11 +54,11 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
     CurrentRequest private request;
 
     /// @notice Our callback is just setting a few variables, 200k should be more than enough gas.
-    uint32 constant callbackGasLimit = 200_000;
+    uint32 immutable callbackGasLimit = 200_000;
     /// @notice Chainlink request confirmations, left at the default @todo figure out what the correct value is here
-    uint16 constant minimumRequestConfirmations = 3;
+    uint16 immutable minimumRequestConfirmations = 3;
     /// @notice Number of words requested in a drawing
-    uint16 constant wordsRequested = 1;
+    uint16 immutable wordsRequested = 1;
 
     /// @notice Cannot redraw during waiting period
     error STILL_IN_WAITING_PERIOD_BEFORE_REDRAWING();
@@ -68,8 +66,8 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
     error WITHDRAW_TIMELOCK_NEEDS_TO_BE_IN_FUTURE();
     /// @notice Token that is offered does not exist with ownerOf
     error TOKEN_BEING_OFFERED_NEEDS_TO_EXIST();
-    /// @notice Token cannot be at zero address
-    error TOKEN_CANNOT_BE_ZERO_ADDRESS();
+    /// @notice Token needs to be a contract when initializing
+    error TOKEN_NEEDS_TO_BE_A_CONTRACT(address potentialTokenAddress);
     /// @notice Token needs to be approved to raffle contract
     error TOKEN_NEEDS_TO_BE_APPROVED_TO_CONTRACT();
     /// @notice Waiting on a response from chainlink
@@ -115,6 +113,7 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
     );
 
     /// @dev Save the coordinator to the contract
+    /// @param _coordinator Address for VRF Coordinator V2 Interface
     constructor(VRFCoordinatorV2Interface _coordinator)
         VRFConsumerBaseV2(address(_coordinator))
         initializer
@@ -123,6 +122,9 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
     }
 
     /// @notice Getter for request details, does not include picked tokenID
+    /// @return currentChainlinkRequestId Current Chainlink Request ID
+    /// @return hasChosenRandomNumber If the random number for the drawing has been chosen
+    /// @return drawTimelock block.timestamp when a redraw can be issued
     function getRequestDetails()
         external
         view
@@ -138,8 +140,8 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
     }
 
     /// @notice Initialize the contract with settings and an admin
-    /// @param admin initial admin
-    /// @param _settings initial settings
+    /// @param admin initial admin user
+    /// @param _settings initial settings for draw
     function initialize(address admin, Settings memory _settings)
         public
         initializer
@@ -159,25 +161,23 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
             }
         }
 
-        // If NFT contract address is 0x0 throw error
-        if (address(_settings.token) == address(0x0)) {
-            revert TOKEN_CANNOT_BE_ZERO_ADDRESS();
+        // If NFT contract address is not a contract
+        if (_settings.token.code.length == 0) {
+            revert TOKEN_NEEDS_TO_BE_A_CONTRACT(_settings.token);
         }
 
-        // Get owner of raffled tokenId and ensure the current owner is the admin
-        try _settings.token.ownerOf(_settings.tokenId) returns (
-            address nftOwner
+        // If drawing token is not a contract
+        if (_settings.drawingToken.code.length == 0) {
+            revert TOKEN_NEEDS_TO_BE_A_CONTRACT(_settings.drawingToken);
+        }
+
+        // Validate token range: end needs to be greater than start
+        // and the size of the range needs to be at least 2 (end is exclusive)
+        if (
+            _settings.drawingTokenEndId < _settings.drawingTokenStartId ||
+            _settings.drawingTokenEndId -
+            _settings.drawingTokenStartId < 2
         ) {
-            // Check if address is the admin address
-            if (nftOwner != admin) {
-                revert DOES_NOT_OWN_NFT();
-            }
-        } catch {
-            revert TOKEN_BEING_OFFERED_NEEDS_TO_EXIST();
-        }
-
-        // Validate token range
-        if (_settings.drawingTokenEndId < _settings.drawingTokenStartId) {
             revert DRAWING_TOKEN_RANGE_INVALID();
         }
 
@@ -186,15 +186,24 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
 
         // Emit initialized event for indexing
         emit InitializedDraw(msg.sender, settings);
+
+        // Get owner of raffled tokenId and ensure the current owner is the admin
+        try
+            IERC721EnumerableUpgradeable(_settings.token).ownerOf(
+                _settings.tokenId
+            )
+        returns (address nftOwner) {
+            // Check if address is the admin address
+            if (nftOwner != admin) {
+                revert DOES_NOT_OWN_NFT();
+            }
+        } catch {
+            revert TOKEN_BEING_OFFERED_NEEDS_TO_EXIST();
+        }
     }
 
     /// @notice Internal function to request entropy
     function _requestRoll() internal {
-        // Owner of token to raffle needs to be this contract
-        if (settings.token.ownerOf(settings.tokenId) != address(this)) {
-            revert DOES_NOT_OWN_NFT();
-        }
-
         // Chainlink request cannot be currently in flight.
         // Request is cleared in re-roll if conditions are correct.
         if (request.currentChainlinkRequestId != 0) {
@@ -232,9 +241,15 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
             revert REQUEST_IN_FLIGHT();
         }
 
-        // Attempt to transfer toke into this address
+        // Emit setup draw user event
+        emit SetupDraw(msg.sender, settings);
+
+        // Request initial roll
+        _requestRoll();
+
+        // Attempt to transfer token into this address
         try
-            settings.token.transferFrom(
+            IERC721EnumerableUpgradeable(settings.token).transferFrom(
                 msg.sender,
                 address(this),
                 settings.tokenId
@@ -242,12 +257,6 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
         {} catch {
             revert TOKEN_NEEDS_TO_BE_APPROVED_TO_CONTRACT();
         }
-
-        // Emit setup draw user event
-        emit SetupDraw(msg.sender, settings);
-
-        // Request initial roll
-        _requestRoll();
 
         // Return the current chainlink request id
         return request.currentChainlinkRequestId;
@@ -266,13 +275,22 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
         // Re-roll
         _requestRoll();
 
+        // Owner of token to raffle needs to be this contract
+        if (
+            IERC721EnumerableUpgradeable(settings.token).ownerOf(
+                settings.tokenId
+            ) != address(this)
+        ) {
+            revert DOES_NOT_OWN_NFT();
+        }
+
         // Return current chainlink request ID
         return request.currentChainlinkRequestId;
     }
 
     /// @notice Function called by chainlink to resolve random words
     /// @param _requestId ID of request sent to chainlink VRF
-    /// @param _randomWords List of uint256 words of random entropy
+    /// @param _randomWords[] List of uint256 words of random entropy
     function fulfillRandomWords(
         uint256 _requestId,
         uint256[] memory _randomWords
@@ -283,6 +301,7 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
         }
 
         // Validate number of words returned
+        // Words requested is an immutable set to 1
         if (_randomWords.length != wordsRequested) {
             revert WRONG_LENGTH_FOR_RANDOM_WORDS();
         }
@@ -293,20 +312,14 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
         // Get total token range
         uint256 tokenRange = settings.drawingTokenEndId -
             settings.drawingTokenStartId;
-        
-        // uint256 checkLoopLimit = 0;
-        // uint256 entropyNumber = _randomWords[0];
-
-        // for (; bitIndex < 8 && entropyNumber > 0; ++bitIndex) {
-        //     if (entropyNumber << bitIndex)
-        // }
 
         // Store a number from it here (reduce number here to reduce gas usage)
+        // We know there will only be 1 word sent at this point.
         request.currentChosenTokenId =
             (_randomWords[0] % tokenRange) +
             settings.drawingTokenStartId;
 
-        // Emit indexer event
+        // Emit completed event.
         emit DiceRollComplete(msg.sender, request);
     }
 
@@ -316,7 +329,10 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
         }
 
         return
-            user == settings.drawingToken.ownerOf(request.currentChosenTokenId);
+            user ==
+            IERC721EnumerableUpgradeable(settings.drawingToken).ownerOf(
+                request.currentChosenTokenId
+            );
     }
 
     /// @notice Function for the winner to call to retrieve their NFT
@@ -329,19 +345,19 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
             revert USER_HAS_NOT_WON();
         }
 
-        // Transfer token to the winter.
-        settings.token.transferFrom(
-            address(this),
-            msg.sender,
-            settings.tokenId
-        );
-
         // Emit a celebratory event
         emit WinnerSentNFT(
             user,
             address(settings.token),
             settings.tokenId,
             settings
+        );
+
+        // Transfer token to the winter.
+        IERC721EnumerableUpgradeable(settings.token).transferFrom(
+            address(this),
+            msg.sender,
+            settings.tokenId
         );
     }
 
@@ -356,10 +372,14 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
             revert RECOVERY_IS_NOT_YET_POSSIBLE();
         }
 
-        // Otherwise, process the withdraw
-        settings.token.transferFrom(address(this), owner(), settings.tokenId);
-
         // Send event for indexing that the owner reclaimed the NFT
         emit OwnerReclaimedNFT(owner());
+
+        // Transfer token to the winter.
+        IERC721EnumerableUpgradeable(settings.token).transferFrom(
+            address(this),
+            msg.sender,
+            settings.tokenId
+        );
     }
 }

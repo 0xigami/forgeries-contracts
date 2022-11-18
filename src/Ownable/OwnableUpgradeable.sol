@@ -26,13 +26,17 @@ abstract contract OwnableUpgradeable is IOwnableUpgradeable, Initializable {
 
     /// @dev Ensures the caller is the owner
     modifier onlyOwner() {
-        if (msg.sender != _owner) revert ONLY_OWNER();
+        if (msg.sender != _owner) {
+            revert ONLY_OWNER();
+        }
         _;
     }
 
     /// @dev Ensures the caller is the pending owner
     modifier onlyPendingOwner() {
-        if (msg.sender != _pendingOwner) revert ONLY_PENDING_OWNER();
+        if (msg.sender != _pendingOwner) {
+            revert ONLY_PENDING_OWNER();
+        }
         _;
     }
 
@@ -72,7 +76,9 @@ abstract contract OwnableUpgradeable is IOwnableUpgradeable, Initializable {
 
         _owner = _newOwner;
 
-        if (_pendingOwner != address(0)) delete _pendingOwner;
+        if (_pendingOwner != address(0)) {
+            delete _pendingOwner;
+        }
     }
 
     /// @notice Initiates a two-step ownership transfer

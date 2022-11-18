@@ -11,3 +11,9 @@
       1. The admin can withdraw the nft and repeat the process, etc. 
       2. [note]: this functionality can be disabled
 
+
+## Deployments
+1. Görli
+   1. Factory: 0x71877Aa4ABbad79e0C93477020A41ff7e06AA746
+2. Mainnet
+   1. None
