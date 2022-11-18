@@ -412,7 +412,7 @@ contract VRFNFTRandomDrawTest is Test {
                 tokenId: 0,
                 drawingToken: address(drawingNFT),
                 drawingTokenStartId: 0,
-                drawingTokenEndId: 90,
+                drawingTokenEndId: 10,
                 drawBufferTime: 1 hours,
                 recoverTimelock: 2 weeks,
                 keyHash: bytes32(
@@ -431,7 +431,7 @@ contract VRFNFTRandomDrawTest is Test {
         vm.stopPrank();
 
         vm.prank(loser);
-        vm.expectRevert();
+        vm.expectRevert(VRFNFTRandomDraw.NEEDS_TO_HAVE_CHOSEN_A_NUMBER.selector);
         drawing.winnerClaimNFT();
 
         vm.prank(admin);
@@ -448,21 +448,21 @@ contract VRFNFTRandomDrawTest is Test {
 
         vm.prank(loser);
         vm.expectRevert();
+        drawing.winnerClaimNFT();
 
-        vm.prank(admin);
+        vm.prank(winner);
         drawing.winnerClaimNFT();
 
         assertEq(targetNFT.balanceOf(admin), 0);
-        assertEq(targetNFT.balanceOf(consumerAddress), 1);
+        assertEq(targetNFT.balanceOf(winner), 1);
 
-        vm.stopPrank();
         vm.prank(loser);
         vm.expectRevert(IOwnableUpgradeable.ONLY_OWNER.selector);
         drawing.lastResortTimelockOwnerClaimNFT();
 
         // should be able to call nft
-        assertEq(targetNFT.balanceOf(admin), 1);
-        assertEq(targetNFT.balanceOf(consumerAddress), 0);
+        assertEq(targetNFT.balanceOf(admin), 0);
+        assertEq(targetNFT.balanceOf(winner), 1);
     }
 
     function test_NFTNotApproved() public {

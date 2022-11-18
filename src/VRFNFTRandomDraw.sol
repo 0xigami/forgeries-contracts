@@ -375,10 +375,10 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
         // Send event for indexing that the owner reclaimed the NFT
         emit OwnerReclaimedNFT(owner());
 
-        // Transfer token to the winter.
+        // Transfer token to the admin/owner.
         IERC721EnumerableUpgradeable(settings.token).transferFrom(
             address(this),
-            msg.sender,
+            owner(),
             settings.tokenId
         );
     }
