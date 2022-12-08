@@ -51,14 +51,19 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
     }
 
     /// @notice Details about the current request to chainlink
-    CurrentRequest private request;
+    CurrentRequest public request;
 
     /// @notice Our callback is just setting a few variables, 200k should be more than enough gas.
     uint32 immutable callbackGasLimit = 200_000;
-    /// @notice Chainlink request confirmations, left at the default @todo figure out what the correct value is here
+    /// @notice Chainlink request confirmations, left at the default
     uint16 immutable minimumRequestConfirmations = 3;
     /// @notice Number of words requested in a drawing
     uint16 immutable wordsRequested = 1;
+
+    /// @dev 60 seconds in a min, 60 mins in an hour
+    uint256 immutable HOUR_IN_SECONDS = 60 * 60;
+    /// @dev 24 hours in a day 7 days in a week
+    uint256 immutable WEEK_IN_SECONDS = (3600 * 24 * 7);
 
     /// @notice Cannot redraw during waiting period
     error STILL_IN_WAITING_PERIOD_BEFORE_REDRAWING();
@@ -150,13 +155,13 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
         settings = _settings;
 
         // Check values in memory:
-        if (_settings.drawBufferTime < 60 * 60) {
+        if (_settings.drawBufferTime < HOUR_IN_SECONDS) {
             revert WITHDRAW_TIMELOCK_NEEDS_TO_BE_AT_LEAST_AN_HOUR();
         }
 
         // If admin recovery is okay
         if (_settings.recoverTimelock != 0) {
-            if (_settings.recoverTimelock < block.timestamp + (3600 * 24 * 7)) {
+            if (_settings.recoverTimelock < block.timestamp + WEEK_IN_SECONDS) {
                 revert RECOVER_TIMELOCK_NEEDS_TO_BE_AT_LEAST_A_WEEK();
             }
         }
@@ -264,6 +269,7 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
 
     /// @notice Call this to re-draw the raffle
     /// @return chainlink request ID
+    /// @dev Only callable by the owner
     function redraw() external onlyOwner returns (uint256) {
         if (request.drawTimelock >= block.timestamp) {
             revert TOO_SOON_TO_REDRAW();
@@ -290,7 +296,7 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
 
     /// @notice Function called by chainlink to resolve random words
     /// @param _requestId ID of request sent to chainlink VRF
-    /// @param _randomWords[] List of uint256 words of random entropy
+    /// @param _randomWords List of uint256 words of random entropy
     function fulfillRandomWords(
         uint256 _requestId,
         uint256[] memory _randomWords
@@ -323,6 +329,8 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
         emit DiceRollComplete(msg.sender, request);
     }
 
+    /// @notice Function to determine if the user has won in the current drawing
+    /// @param user address for the user to check if they have won in the current drawing
     function hasUserWon(address user) public view returns (bool) {
         if (!request.hasChosenRandomNumber) {
             revert NEEDS_TO_HAVE_CHOSEN_A_NUMBER();
@@ -362,6 +370,7 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
     }
 
     /// @notice Optional last resort admin reclaim nft function
+    /// @dev Only callable by the owner
     function lastResortTimelockOwnerClaimNFT() external onlyOwner {
         // If recoverTimelock is not setup, or if not yet occurred
         if (
