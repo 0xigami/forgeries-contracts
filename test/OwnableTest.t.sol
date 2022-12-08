@@ -77,6 +77,15 @@ contract OwnableTest is Test {
     assertEq(ownedContract.owner(), newOwner);
   }
 
+  function test_NotTransferOwnershipZero() public {
+    address newOwner = address(0x99);
+    assertEq(ownedContract.pendingOwner(), address(0x0));
+    assertEq(ownedContract.owner(), defaultOwner);
+    vm.prank(defaultOwner);
+    vm.expectRevert(IOwnableUpgradeable.OWNER_CANNOT_BE_ZERO_ADDRESS.selector);
+    ownedContract.transferOwnership(address(0));
+  }
+
   function test_PendingThenTransfer() public {
     address newOwner = address(0x99);
     vm.prank(defaultOwner);

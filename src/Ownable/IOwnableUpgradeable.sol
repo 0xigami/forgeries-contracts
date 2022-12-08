@@ -34,6 +34,10 @@ interface IOwnableUpgradeable {
     /// @dev Reverts if an unauthorized user calls a pending owner function
     error ONLY_PENDING_OWNER();
 
+    /// @dev Owner cannot be the zero/burn address
+    error OWNER_CANNOT_BE_ZERO_ADDRESS();
+
+
     ///                                                          ///
     ///                           FUNCTIONS                      ///
     ///                                                          ///
