@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.16;
 
-import { IOwnableUpgradeable } from "./IOwnableUpgradeable.sol";
-import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {IOwnableUpgradeable} from "./IOwnableUpgradeable.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 /// @title Ownable
-/// @author Rohan Kulkarni
+/// @author Rohan Kulkarni / Iain Nash
 /// @notice Modified from OpenZeppelin Contracts v4.7.3 (access/OwnableUpgradeable.sol)
 /// - Uses custom errors declared in IOwnable
 /// - Adds optional two-step ownership transfer (`safeTransferOwnership` + `acceptOwnership`)
@@ -19,6 +19,14 @@ abstract contract OwnableUpgradeable is IOwnableUpgradeable, Initializable {
 
     /// @dev The address of the pending owner
     address internal _pendingOwner;
+
+    /// @dev Modifier to check if the address argument is the zero/burn address
+    modifier notZeroAddress(address check) {
+        if (check == address(0)) {
+            revert OWNER_CANNOT_BE_ZERO_ADDRESS();
+        }
+        _;
+    }
 
     ///                                                          ///
     ///                           MODIFIERS                      ///
@@ -46,14 +54,18 @@ abstract contract OwnableUpgradeable is IOwnableUpgradeable, Initializable {
 
     /// @dev Initializes contract ownership
     /// @param _initialOwner The initial owner address
-    function __Ownable_init(address _initialOwner) internal onlyInitializing {
+    function __Ownable_init(address _initialOwner)
+        internal
+        notZeroAddress(_initialOwner)
+        onlyInitializing
+    {
         _owner = _initialOwner;
 
         emit OwnerUpdated(address(0), _initialOwner);
     }
 
     /// @notice The address of the owner
-    function owner() public virtual view returns (address) {
+    function owner() public view virtual returns (address) {
         return _owner;
     }
 
@@ -64,7 +76,11 @@ abstract contract OwnableUpgradeable is IOwnableUpgradeable, Initializable {
 
     /// @notice Forces an ownership transfer from the last owner
     /// @param _newOwner The new owner address
-    function transferOwnership(address _newOwner) public onlyOwner {
+    function transferOwnership(address _newOwner)
+        public
+        notZeroAddress(_newOwner)
+        onlyOwner
+    {
         _transferOwnership(_newOwner);
     }
 
@@ -83,10 +99,20 @@ abstract contract OwnableUpgradeable is IOwnableUpgradeable, Initializable {
 
     /// @notice Initiates a two-step ownership transfer
     /// @param _newOwner The new owner address
-    function safeTransferOwnership(address _newOwner) public onlyOwner {
+    function safeTransferOwnership(address _newOwner)
+        public
+        notZeroAddress(_newOwner)
+        onlyOwner
+    {
         _pendingOwner = _newOwner;
 
         emit OwnerPending(_owner, _newOwner);
+    }
+
+    /// @notice Resign ownership of contract
+    /// @dev only callably by the owner, dangerous call.
+    function resignOwnership() public onlyOwner {
+        _transferOwnership(address(0));
     }
 
     /// @notice Accepts an ownership transfer

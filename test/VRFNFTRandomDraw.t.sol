@@ -59,20 +59,29 @@ contract VRFNFTRandomDrawTest is Test {
         // invalid time for drawing
         vm.expectRevert(
             VRFNFTRandomDraw
-                .WITHDRAW_TIMELOCK_NEEDS_TO_BE_AT_LEAST_AN_HOUR
+                .REDRAW_TIMELOCK_NEEDS_TO_BE_MORE_THAN_AN_HOUR
                 .selector
         );
         factory.makeNewDraw(settings);
+
         // fix this issue
-        settings.drawBufferTime = 4000;
+        settings.drawBufferTime = 2 hours;
         settings.recoverTimelock = block.timestamp + 1000;
         
-
         // recovery timelock too soon
         vm.expectRevert(
             VRFNFTRandomDraw
                 .RECOVER_TIMELOCK_NEEDS_TO_BE_AT_LEAST_A_WEEK
                 .selector
+        );
+        factory.makeNewDraw(settings);
+
+        // fix recovery issue
+        settings.drawBufferTime = 2 hours;
+        settings.recoverTimelock = 2 weeks;
+        
+        vm.expectRevert(
+            abi.encodeWithSelector(VRFNFTRandomDraw.TOKEN_NEEDS_TO_BE_A_CONTRACT.selector, address(0x0))
         );
         factory.makeNewDraw(settings);
     }
@@ -102,6 +111,7 @@ contract VRFNFTRandomDrawTest is Test {
     function test_NoTokenOwner() public {
         VRFNFTRandomDraw.Settings memory settings;
         settings.drawBufferTime = 6000;
+        settings.recoverTimelock = 2 weeks;
         settings.token = address(targetNFT);
         settings.drawingTokenStartId = 0;
         settings.drawingTokenEndId = 4;
@@ -117,6 +127,7 @@ contract VRFNFTRandomDrawTest is Test {
         vm.startPrank(sender);
         VRFNFTRandomDraw.Settings memory settings;
         settings.drawBufferTime = 6000;
+        settings.recoverTimelock = 2 weeks;
         settings.token = address(targetNFT);
         settings.drawingToken = address(drawingNFT);
         settings.tokenId = 0;
@@ -132,6 +143,7 @@ contract VRFNFTRandomDrawTest is Test {
        address sender = address(0x994);
         VRFNFTRandomDraw.Settings memory settings;
         settings.drawBufferTime = 6000;
+        settings.recoverTimelock = 2 weeks;
         settings.token = address(targetNFT);
         settings.tokenId = 0;
         settings.drawingTokenStartId = 0;

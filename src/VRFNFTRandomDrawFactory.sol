@@ -11,6 +11,9 @@ contract VRFNFTRandomDrawFactory {
     /// @notice Implementation to clone of the raffle code
     address public immutable implementation;
 
+    /// @notice Cannot be initialized with a zero address impl.
+    error IMPL_ZERO_ADDRESS_NOT_ALLOWED();
+
     /// @notice Event emitted when a new drawing contract is created
     event SetupNewDrawing(address user, address drawing);
 
@@ -19,6 +22,9 @@ contract VRFNFTRandomDrawFactory {
 
     /// @notice Constructor to set the implementation
     constructor(address _implementation) {
+        if (_implementation == address(0)) {
+            revert IMPL_ZERO_ADDRESS_NOT_ALLOWED();
+        }
         implementation = _implementation;
         emit SetupFactory();
     }
