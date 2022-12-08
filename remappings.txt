@@ -1,4 +1,4 @@
-@chainlink/=lib/chainlink/
-ds-test/=lib/forge-std/lib/ds-test/src/
-forge-std/=lib/forge-std/src/
-@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/
+@chainlink/=node_modules/@chainlink/
+ds-test/=node_modules/ds-test/src/
+forge-std/=node_modules/forge-std/src/
+@openzeppelin/contracts-upgradeable/=node_modules/@openzeppelin/contracts-upgradeable/
