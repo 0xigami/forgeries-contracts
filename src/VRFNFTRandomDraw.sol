@@ -51,11 +51,11 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
     }
 
     /// @notice Details about the current request to chainlink
-    CurrentRequest private request;
+    CurrentRequest public request;
 
     /// @notice Our callback is just setting a few variables, 200k should be more than enough gas.
     uint32 immutable callbackGasLimit = 200_000;
-    /// @notice Chainlink request confirmations, left at the default @todo figure out what the correct value is here
+    /// @notice Chainlink request confirmations, left at the default
     uint16 immutable minimumRequestConfirmations = 3;
     /// @notice Number of words requested in a drawing
     uint16 immutable wordsRequested = 1;
@@ -264,6 +264,7 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
 
     /// @notice Call this to re-draw the raffle
     /// @return chainlink request ID
+    /// @dev Only callable by the owner
     function redraw() external onlyOwner returns (uint256) {
         if (request.drawTimelock >= block.timestamp) {
             revert TOO_SOON_TO_REDRAW();
@@ -290,7 +291,7 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
 
     /// @notice Function called by chainlink to resolve random words
     /// @param _requestId ID of request sent to chainlink VRF
-    /// @param _randomWords[] List of uint256 words of random entropy
+    /// @param _randomWords List of uint256 words of random entropy
     function fulfillRandomWords(
         uint256 _requestId,
         uint256[] memory _randomWords
@@ -323,6 +324,8 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
         emit DiceRollComplete(msg.sender, request);
     }
 
+    /// @notice Function to determine if the user has won in the current drawing
+    /// @param user address for the user to check if they have won in the current drawing
     function hasUserWon(address user) public view returns (bool) {
         if (!request.hasChosenRandomNumber) {
             revert NEEDS_TO_HAVE_CHOSEN_A_NUMBER();
@@ -362,6 +365,7 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
     }
 
     /// @notice Optional last resort admin reclaim nft function
+    /// @dev Only callable by the owner
     function lastResortTimelockOwnerClaimNFT() external onlyOwner {
         // If recoverTimelock is not setup, or if not yet occurred
         if (
