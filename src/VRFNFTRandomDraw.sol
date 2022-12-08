@@ -64,11 +64,13 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
     uint256 immutable HOUR_IN_SECONDS = 60 * 60;
     /// @dev 24 hours in a day 7 days in a week
     uint256 immutable WEEK_IN_SECONDS = (3600 * 24 * 7);
+    // @dev about 30 days in a month
+    uint256 immutable MONTH_IN_SECONDS = (3600 * 24 * 7) * 30;
 
     /// @notice Cannot redraw during waiting period
     error STILL_IN_WAITING_PERIOD_BEFORE_REDRAWING();
     /// @notice Admin emergency withdraw can only happen once unlocked
-    error WITHDRAW_TIMELOCK_NEEDS_TO_BE_IN_FUTURE();
+    error RECOVERY_IS_NOT_YET_POSSIBLE();
     /// @notice Token that is offered does not exist with ownerOf
     error TOKEN_BEING_OFFERED_NEEDS_TO_EXIST();
     /// @notice Token needs to be a contract when initializing
@@ -87,17 +89,18 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
     /// @notice When the range is [20,0] (from 20 to 0, that doesn't make sense)
     error DRAWING_TOKEN_RANGE_INVALID();
     /// @notice Withdraw timelock min is 1 hour
-    error WITHDRAW_TIMELOCK_NEEDS_TO_BE_AT_LEAST_AN_HOUR();
+    error REDRAW_TIMELOCK_NEEDS_TO_BE_MORE_THAN_AN_HOUR();
+    error REDRAW_TIMELOCK_NEEDS_TO_BE_LESS_THAN_A_MONTH();
     /// @notice Admin NFT recovery timelock min is 1 week
     error RECOVER_TIMELOCK_NEEDS_TO_BE_AT_LEAST_A_WEEK();
+    /// @notice Admin NFT recovery timelock max is 1 year
+    error RECOVER_TIMELOCK_NEEDS_TO_BE_LESS_THAN_A_YEAR();
     /// @notice The given user has not won
     error USER_HAS_NOT_WON();
     /// @notice Cannot re-draw yet
     error TOO_SOON_TO_REDRAW();
     /// @notice NFT for raffle is not owned by the admin
     error DOES_NOT_OWN_NFT();
-    /// @notice Recovery is too early
-    error RECOVERY_IS_NOT_YET_POSSIBLE();
     /// @notice Too many / few random words are sent back from chainlink
     error WRONG_LENGTH_FOR_RANDOM_WORDS();
 
@@ -156,14 +159,20 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
 
         // Check values in memory:
         if (_settings.drawBufferTime < HOUR_IN_SECONDS) {
-            revert WITHDRAW_TIMELOCK_NEEDS_TO_BE_AT_LEAST_AN_HOUR();
+            revert REDRAW_TIMELOCK_NEEDS_TO_BE_MORE_THAN_AN_HOUR();
+        }
+        if (_settings.drawBufferTime > MONTH_IN_SECONDS) {
+            revert REDRAW_TIMELOCK_NEEDS_TO_BE_LESS_THAN_A_MONTH();
         }
 
-        // If admin recovery is okay
-        if (_settings.recoverTimelock != 0) {
-            if (_settings.recoverTimelock < block.timestamp + WEEK_IN_SECONDS) {
-                revert RECOVER_TIMELOCK_NEEDS_TO_BE_AT_LEAST_A_WEEK();
-            }
+        if (_settings.recoverTimelock < block.timestamp + WEEK_IN_SECONDS) {
+            revert RECOVER_TIMELOCK_NEEDS_TO_BE_AT_LEAST_A_WEEK();
+        }
+        if (
+            _settings.recoverTimelock >
+            block.timestamp + (MONTH_IN_SECONDS * 12)
+        ) {
+            revert RECOVER_TIMELOCK_NEEDS_TO_BE_LESS_THAN_A_YEAR();
         }
 
         // If NFT contract address is not a contract
@@ -180,8 +189,7 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
         // and the size of the range needs to be at least 2 (end is exclusive)
         if (
             _settings.drawingTokenEndId < _settings.drawingTokenStartId ||
-            _settings.drawingTokenEndId -
-            _settings.drawingTokenStartId < 2
+            _settings.drawingTokenEndId - _settings.drawingTokenStartId < 2
         ) {
             revert DRAWING_TOKEN_RANGE_INVALID();
         }
@@ -373,10 +381,7 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
     /// @dev Only callable by the owner
     function lastResortTimelockOwnerClaimNFT() external onlyOwner {
         // If recoverTimelock is not setup, or if not yet occurred
-        if (
-            settings.recoverTimelock == 0 ||
-            settings.recoverTimelock > block.timestamp
-        ) {
+        if (settings.recoverTimelock > block.timestamp) {
             // Stop the withdraw
             revert RECOVERY_IS_NOT_YET_POSSIBLE();
         }
