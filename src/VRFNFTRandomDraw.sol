@@ -60,6 +60,11 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
     /// @notice Number of words requested in a drawing
     uint16 immutable wordsRequested = 1;
 
+    /// @dev 60 seconds in a min, 60 mins in an hour
+    uint256 immutable HOUR_IN_SECONDS = 60 * 60;
+    /// @dev 24 hours in a day 7 days in a week
+    uint256 immutable WEEK_IN_SECONDS = (3600 * 24 * 7);
+
     /// @notice Cannot redraw during waiting period
     error STILL_IN_WAITING_PERIOD_BEFORE_REDRAWING();
     /// @notice Admin emergency withdraw can only happen once unlocked
@@ -150,13 +155,13 @@ contract VRFNFTRandomDraw is VRFConsumerBaseV2, OwnableUpgradeable {
         settings = _settings;
 
         // Check values in memory:
-        if (_settings.drawBufferTime < 60 * 60) {
+        if (_settings.drawBufferTime < HOUR_IN_SECONDS) {
             revert WITHDRAW_TIMELOCK_NEEDS_TO_BE_AT_LEAST_AN_HOUR();
         }
 
         // If admin recovery is okay
         if (_settings.recoverTimelock != 0) {
-            if (_settings.recoverTimelock < block.timestamp + (3600 * 24 * 7)) {
+            if (_settings.recoverTimelock < block.timestamp + WEEK_IN_SECONDS) {
                 revert RECOVER_TIMELOCK_NEEDS_TO_BE_AT_LEAST_A_WEEK();
             }
         }
