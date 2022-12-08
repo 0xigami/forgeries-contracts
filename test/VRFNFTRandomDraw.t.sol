@@ -13,6 +13,9 @@ import {IOwnableUpgradeable} from "../src/Ownable/IOwnableUpgradeable.sol";
 
 import {IERC721EnumerableUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/IERC721EnumerableUpgradeable.sol";
 
+import {IVRFNFTRandomDraw} from "../src/interfaces/IVRFNFTRandomDraw.sol";
+import {IVRFNFTRandomDrawFactory} from "../src/interfaces/IVRFNFTRandomDrawFactory.sol";
+
 import {MockNFT} from "./mocks/MockNFT.sol";
 import {MockERC20} from "./mocks/MockERC20.sol";
 
@@ -54,11 +57,11 @@ contract VRFNFTRandomDrawTest is Test {
     }
 
     function test_InvalidOptionTime() public {
-        VRFNFTRandomDraw.Settings memory settings;
+        IVRFNFTRandomDraw.Settings memory settings;
         settings.drawBufferTime = 0;
         // invalid time for drawing
         vm.expectRevert(
-            VRFNFTRandomDraw
+            IVRFNFTRandomDraw
                 .REDRAW_TIMELOCK_NEEDS_TO_BE_MORE_THAN_AN_HOUR
                 .selector
         );
@@ -70,7 +73,7 @@ contract VRFNFTRandomDrawTest is Test {
         
         // recovery timelock too soon
         vm.expectRevert(
-            VRFNFTRandomDraw
+            IVRFNFTRandomDraw
                 .RECOVER_TIMELOCK_NEEDS_TO_BE_AT_LEAST_A_WEEK
                 .selector
         );
@@ -81,7 +84,7 @@ contract VRFNFTRandomDrawTest is Test {
         settings.recoverTimelock = 2 weeks;
         
         vm.expectRevert(
-            abi.encodeWithSelector(VRFNFTRandomDraw.TOKEN_NEEDS_TO_BE_A_CONTRACT.selector, address(0x0))
+            abi.encodeWithSelector(IVRFNFTRandomDraw.TOKEN_NEEDS_TO_BE_A_CONTRACT.selector, address(0x0))
         );
         factory.makeNewDraw(settings);
     }
@@ -92,7 +95,7 @@ contract VRFNFTRandomDrawTest is Test {
         settings.recoverTimelock = 1000;
         // recovery timelock too soon
         vm.expectRevert(
-            VRFNFTRandomDraw
+            IVRFNFTRandomDraw
                 .RECOVER_TIMELOCK_NEEDS_TO_BE_AT_LEAST_A_WEEK
                 .selector
         );
@@ -104,7 +107,7 @@ contract VRFNFTRandomDrawTest is Test {
         settings.drawBufferTime = 6000;
         settings.recoverTimelock = block.timestamp + 604800;
         // Token is not a contract
-        vm.expectRevert(abi.encodeWithSelector(VRFNFTRandomDraw.TOKEN_NEEDS_TO_BE_A_CONTRACT.selector, address(0x0)));
+        vm.expectRevert(abi.encodeWithSelector(IVRFNFTRandomDraw.TOKEN_NEEDS_TO_BE_A_CONTRACT.selector, address(0x0)));
         factory.makeNewDraw(settings);
     }
 
@@ -118,14 +121,14 @@ contract VRFNFTRandomDrawTest is Test {
         settings.drawingToken = address(drawingNFT);
 
         // recovery timelock too soon
-        vm.expectRevert(VRFNFTRandomDraw.TOKEN_BEING_OFFERED_NEEDS_TO_EXIST.selector);
+        vm.expectRevert(IVRFNFTRandomDraw.TOKEN_BEING_OFFERED_NEEDS_TO_EXIST.selector);
         factory.makeNewDraw(settings);
     }
 
     function test_BadDrawingRange() public {
         address sender = address(0x994);
         vm.startPrank(sender);
-        VRFNFTRandomDraw.Settings memory settings;
+        IVRFNFTRandomDraw.Settings memory settings;
         settings.drawBufferTime = 6000;
         settings.recoverTimelock = 2 weeks;
         settings.token = address(targetNFT);
@@ -135,13 +138,13 @@ contract VRFNFTRandomDrawTest is Test {
         targetNFT.mint();
 
         // recovery timelock too soon
-        vm.expectRevert(VRFNFTRandomDraw.DRAWING_TOKEN_RANGE_INVALID.selector);
+        vm.expectRevert(IVRFNFTRandomDraw.DRAWING_TOKEN_RANGE_INVALID.selector);
         factory.makeNewDraw(settings);
     }
 
     function test_TokenNotApproved() public {
        address sender = address(0x994);
-        VRFNFTRandomDraw.Settings memory settings;
+        IVRFNFTRandomDraw.Settings memory settings;
         settings.drawBufferTime = 6000;
         settings.recoverTimelock = 2 weeks;
         settings.token = address(targetNFT);
@@ -155,7 +158,7 @@ contract VRFNFTRandomDrawTest is Test {
         targetNFT.mint();
 
         vm.prank(sender);
-        VRFNFTRandomDraw draw = VRFNFTRandomDraw(factory.makeNewDraw(settings));
+        IVRFNFTRandomDraw draw = VRFNFTRandomDraw(factory.makeNewDraw(settings));
 
         vm.prank(admin);
         mockCoordinator.addConsumer(subscriptionId, address(draw));
@@ -163,7 +166,7 @@ contract VRFNFTRandomDrawTest is Test {
         mockCoordinator.fundSubscription(subscriptionId, 100 ether);
 
         // Token needs to be approved
-        vm.expectRevert(VRFNFTRandomDraw.TOKEN_NEEDS_TO_BE_APPROVED_TO_CONTRACT.selector);
+        vm.expectRevert(IVRFNFTRandomDraw.TOKEN_NEEDS_TO_BE_APPROVED_TO_CONTRACT.selector);
         vm.prank(sender);
         draw.startDraw();
     }
@@ -182,7 +185,7 @@ contract VRFNFTRandomDrawTest is Test {
         targetNFT.mint();
 
         address consumerAddress = factory.makeNewDraw(
-            VRFNFTRandomDraw.Settings({
+            IVRFNFTRandomDraw.Settings({
                 token: address(targetNFT),
                 tokenId: 0,
                 drawingToken: address(drawingNFT),
@@ -203,14 +206,14 @@ contract VRFNFTRandomDrawTest is Test {
 
         VRFNFTRandomDraw drawing = VRFNFTRandomDraw(consumerAddress);
 
-        vm.expectRevert(VRFNFTRandomDraw.TOKEN_NEEDS_TO_BE_APPROVED_TO_CONTRACT.selector);
+        vm.expectRevert(IVRFNFTRandomDraw.TOKEN_NEEDS_TO_BE_APPROVED_TO_CONTRACT.selector);
         drawing.startDraw();
 
         targetNFT.setApprovalForAll(consumerAddress, true);
 
         uint256 drawingId = drawing.startDraw();
 
-        vm.expectRevert(VRFNFTRandomDraw.REQUEST_IN_FLIGHT.selector);
+        vm.expectRevert(IVRFNFTRandomDraw.REQUEST_IN_FLIGHT.selector);
         drawing.startDraw();
     }
 
@@ -229,7 +232,7 @@ contract VRFNFTRandomDrawTest is Test {
         targetNFT.mint();
 
         address consumerAddress = factory.makeNewDraw(
-            VRFNFTRandomDraw.Settings({
+            IVRFNFTRandomDraw.Settings({
                 token: address(targetNFT),
                 tokenId: 0,
                 drawingToken: address(drawingNFT),
@@ -291,7 +294,7 @@ contract VRFNFTRandomDrawTest is Test {
         targetNFT.mint();
 
         address consumerAddress = factory.makeNewDraw(
-            VRFNFTRandomDraw.Settings({
+            IVRFNFTRandomDraw.Settings({
                 token: address(targetNFT),
                 tokenId: 0,
                 drawingToken: address(drawingNFT),
@@ -344,7 +347,7 @@ contract VRFNFTRandomDrawTest is Test {
         targetNFT.mint();
 
         address consumerAddress = factory.makeNewDraw(
-            VRFNFTRandomDraw.Settings({
+            IVRFNFTRandomDraw.Settings({
                 token: address(targetNFT),
                 tokenId: 0,
                 drawingToken: address(drawingNFT),
@@ -375,7 +378,7 @@ contract VRFNFTRandomDrawTest is Test {
         assertEq(drawTimelock, 3601);
         assertEq(block.timestamp, 1);
 
-        vm.expectRevert(VRFNFTRandomDraw.TOO_SOON_TO_REDRAW.selector);
+        vm.expectRevert(IVRFNFTRandomDraw.TOO_SOON_TO_REDRAW.selector);
         drawing.redraw();
 
         vm.warp(2 hours);
@@ -419,7 +422,7 @@ contract VRFNFTRandomDrawTest is Test {
         targetNFT.mint();
 
         address consumerAddress = factory.makeNewDraw(
-            VRFNFTRandomDraw.Settings({
+            IVRFNFTRandomDraw.Settings({
                 token: address(targetNFT),
                 tokenId: 0,
                 drawingToken: address(drawingNFT),
@@ -443,7 +446,7 @@ contract VRFNFTRandomDrawTest is Test {
         vm.stopPrank();
 
         vm.prank(loser);
-        vm.expectRevert(VRFNFTRandomDraw.NEEDS_TO_HAVE_CHOSEN_A_NUMBER.selector);
+        vm.expectRevert(IVRFNFTRandomDraw.NEEDS_TO_HAVE_CHOSEN_A_NUMBER.selector);
         drawing.winnerClaimNFT();
 
         vm.prank(admin);
@@ -491,7 +494,7 @@ contract VRFNFTRandomDrawTest is Test {
         targetNFT.mint();
 
         address consumerAddress = factory.makeNewDraw(
-            VRFNFTRandomDraw.Settings({
+            IVRFNFTRandomDraw.Settings({
                 token: address(targetNFT),
                 tokenId: 0,
                 drawingToken: address(drawingNFT),

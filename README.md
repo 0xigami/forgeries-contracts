@@ -30,10 +30,13 @@ This contract has 2 safeguards:
 4. Run tests w/ gas reports: `forge test --gas-report`
 5. Run Deploy Script: `forge script ./script/SetupContractsScript.s.sol` (recommended to also verify with `forge script --verify`)
 
-## References:
+## Dependencies:
 
 1. https://github.com/OpenZeppelin/openzeppelin-contracts-upgradeable/
+  a. Utilized for
+
 2. https://github.com/smartcontractkit/chainlink/
+  a. Chainlink smartcontractkit: 
 
 ## Deployments
 1. Görli
