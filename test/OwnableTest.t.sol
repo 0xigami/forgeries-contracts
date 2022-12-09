@@ -3,9 +3,9 @@ pragma solidity 0.8.16;
 
 import "forge-std/Test.sol";
 
-import {IOwnableUpgradeable} from "../src/Ownable/IOwnableUpgradeable.sol";
+import {IOwnableUpgradeable} from "../src/ownable/IOwnableUpgradeable.sol";
 
-import {OwnableUpgradeable} from "../src/Ownable/OwnableUpgradeable.sol";
+import {OwnableUpgradeable} from "../src/ownable/OwnableUpgradeable.sol";
 
 contract OwnedContract is OwnableUpgradeable {
   constructor() initializer {

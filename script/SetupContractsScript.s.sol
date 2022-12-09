@@ -6,13 +6,19 @@ import "forge-std/console2.sol";
 
 import {VRFNFTRandomDraw} from "../src/VRFNFTRandomDraw.sol";
 import {VRFNFTRandomDrawFactory} from "../src/VRFNFTRandomDrawFactory.sol";
+import {VRFNFTRandomDrawFactoryProxy} from "../src/VRFNFTRandomDrawFactoryProxy.sol";
 import {VRFCoordinatorV2Interface} from "@chainlink/contracts/src/v0.8/VRFCoordinatorV2.sol";
 
 contract SetupContractsScript is Script {
     address coordinatorAddress;
+    address factoryOwner;
+    address proxyNewOwner;
 
     function setUp() public {
         coordinatorAddress = vm.envAddress("CHAINLINK_COORDINATOR");
+        factoryOwner = vm.envAddress("FACTORY_OWNER");
+        // can be zero to skip setting up proxy
+        proxyNewOwner = vm.envOr("NEW_PROXY_WITH_OWNER", address(0));
     }
 
     function run() public {
@@ -22,17 +28,28 @@ contract SetupContractsScript is Script {
             VRFCoordinatorV2Interface(coordinatorAddress)
         );
 
-        VRFNFTRandomDrawFactory factory = new VRFNFTRandomDrawFactory(
+        VRFNFTRandomDrawFactory factoryImpl = new VRFNFTRandomDrawFactory(
             address(drawImpl)
         );
 
-        vm.stopBroadcast();
+        address factoryProxyAddress;
+        if (proxyNewOwner != address(0)) {
+            factoryProxyAddress = address(
+                new VRFNFTRandomDrawFactoryProxy(
+                    address(factoryImpl),
+                    proxyNewOwner
+                )
+            );
+        }
 
-
-        console2.log("Factory: ");
-        console2.log(address(factory));
+        console2.log("Factory Impl: ");
+        console2.log(address(factoryImpl));
         console2.log("Draw Impl: ");
         console2.log(address(drawImpl));
-        vm.label(address(factory), "factory");
+
+        if (factoryProxyAddress != address(0)) {
+            console2.log("Factory Proxy: ");
+            console2.log(factoryProxyAddress);
+        }
     }
 }

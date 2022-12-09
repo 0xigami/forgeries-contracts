@@ -1,20 +1,22 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.16;
 
-import {OwnableUpgradeable} from "./Ownable/OwnableUpgradeable.sol";
+import {OwnableUpgradeable} from "./ownable/OwnableUpgradeable.sol";
 import {IERC721EnumerableUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/IERC721EnumerableUpgradeable.sol";
 
 import {VRFConsumerBaseV2} from "@chainlink/contracts/src/v0.8/VRFConsumerBaseV2.sol";
 import {VRFCoordinatorV2, VRFCoordinatorV2Interface} from "@chainlink/contracts/src/v0.8/VRFCoordinatorV2.sol";
 
 import {IVRFNFTRandomDraw} from "./interfaces/IVRFNFTRandomDraw.sol";
+import {Version} from "./utils/Version.sol";
 
 /// @notice VRFNFTRandom Draw with NFT Tickets
 /// @author @isiain
 contract VRFNFTRandomDraw is
     IVRFNFTRandomDraw,
     VRFConsumerBaseV2,
-    OwnableUpgradeable
+    OwnableUpgradeable,
+    Version(1)
 {
     /// @notice Our callback is just setting a few variables, 200k should be more than enough gas.
     uint32 immutable callbackGasLimit = 200_000;

@@ -50,6 +50,7 @@ contract VRFNFTRandomDrawTest is Test {
         mockCoordinator = new VRFCoordinatorV2Mock(0.1 ether, 1000);
 
         VRFNFTRandomDraw drawImpl = new VRFNFTRandomDraw(mockCoordinator);
+        // Unproxied/unowned factory
         factory = new VRFNFTRandomDrawFactory(address(drawImpl));
 
         vm.prank(admin);
