@@ -15,13 +15,13 @@ import {IVRFNFTRandomDraw} from "../src/interfaces/IVRFNFTRandomDraw.sol";
 import {IVRFNFTRandomDrawFactory} from "../src/interfaces/IVRFNFTRandomDrawFactory.sol";
 import {VRFNFTRandomDrawFactoryProxy} from "../src/VRFNFTRandomDrawFactoryProxy.sol";
 
-import {IOwnableUpgradeable} from '../src/ownable/IOwnableUpgradeable.sol';
+import {IOwnableUpgradeable} from "../src/ownable/IOwnableUpgradeable.sol";
 
 contract VRFNFTRandomDrawFactoryTest is Test {
     function testFactoryInitializeConstructor() public {
         address mockImplAddress = address(0x123);
         VRFNFTRandomDrawFactory factory = new VRFNFTRandomDrawFactory(
-            address(mockImplAddress)
+            (mockImplAddress)
         );
         vm.expectRevert();
         factory.initialize(address(0x222));
@@ -39,6 +39,9 @@ contract VRFNFTRandomDrawFactoryTest is Test {
             address(factory),
             defaultOwnerAddress
         );
-        assertEq(IOwnableUpgradeable(address(proxy)).owner(), defaultOwnerAddress);
+        assertEq(
+            IOwnableUpgradeable(address(proxy)).owner(),
+            defaultOwnerAddress
+        );
     }
 }

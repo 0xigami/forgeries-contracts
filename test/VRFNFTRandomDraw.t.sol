@@ -9,7 +9,7 @@ import {VRFCoordinatorV2} from "@chainlink/contracts/src/v0.8/VRFCoordinatorV2.s
 import {VRFNFTRandomDraw} from "../src/VRFNFTRandomDraw.sol";
 import {VRFNFTRandomDrawFactory} from "../src/VRFNFTRandomDrawFactory.sol";
 
-import {IOwnableUpgradeable} from "../src/Ownable/IOwnableUpgradeable.sol";
+import {IOwnableUpgradeable} from "../src/ownable/IOwnableUpgradeable.sol";
 
 import {IERC721EnumerableUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/IERC721EnumerableUpgradeable.sol";
 
