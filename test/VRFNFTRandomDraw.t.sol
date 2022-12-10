@@ -9,7 +9,7 @@ import {VRFCoordinatorV2} from "@chainlink/contracts/src/v0.8/VRFCoordinatorV2.s
 import {VRFNFTRandomDraw} from "../src/VRFNFTRandomDraw.sol";
 import {VRFNFTRandomDrawFactory} from "../src/VRFNFTRandomDrawFactory.sol";
 
-import {IOwnableUpgradeable} from "../src/Ownable/IOwnableUpgradeable.sol";
+import {IOwnableUpgradeable} from "../src/ownable/IOwnableUpgradeable.sol";
 
 import {IERC721EnumerableUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/IERC721EnumerableUpgradeable.sol";
 
@@ -50,10 +50,31 @@ contract VRFNFTRandomDrawTest is Test {
         mockCoordinator = new VRFCoordinatorV2Mock(0.1 ether, 1000);
 
         VRFNFTRandomDraw drawImpl = new VRFNFTRandomDraw(mockCoordinator);
+        // Unproxied/unowned factory
         factory = new VRFNFTRandomDrawFactory(address(drawImpl));
 
         vm.prank(admin);
         subscriptionId = mockCoordinator.createSubscription();
+    }
+
+    function test_Version() public {
+address sender = address(0x994);
+        IVRFNFTRandomDraw.Settings memory settings;
+        settings.drawBufferTime = 6000;
+        settings.recoverTimelock = 2 weeks;
+        settings.token = address(targetNFT);
+        settings.tokenId = 0;
+        settings.drawingTokenStartId = 0;
+        settings.drawingTokenEndId = 2;
+        settings.drawingToken = address(drawingNFT);
+        settings.subscriptionId = subscriptionId;
+
+        vm.prank(sender);
+        targetNFT.mint();
+
+        vm.prank(sender);
+        VRFNFTRandomDraw draw = VRFNFTRandomDraw(factory.makeNewDraw(settings));
+        assertEq(draw.contractVersion(), 1);
     }
 
     function test_InvalidOptionTime() public {

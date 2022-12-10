@@ -10,6 +10,10 @@ interface IVRFNFTRandomDrawFactory {
     /// @notice Event emitted when a new drawing contract is created
     event SetupNewDrawing(address user, address drawing);
 
+    /// @notice Called to initialize the factory contract from the proxy
+    /// @param _initialOwner the initial owner for the factory
+    function initialize(address _initialOwner) external;
+
     /// @notice Emitted when the factory is setup
     event SetupFactory();
 
