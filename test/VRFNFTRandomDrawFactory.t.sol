@@ -28,6 +28,14 @@ contract VRFNFTRandomDrawFactoryTest is Test {
         assertEq(IOwnableUpgradeable(address(factory)).owner(), address(0x0));
     }
 
+    function testFactoryVersion() public {
+        address mockImplAddress = address(0x123);
+        VRFNFTRandomDrawFactory factory = new VRFNFTRandomDrawFactory(
+            (mockImplAddress)
+        );
+        assertEq(factory.contractVersion(), 1);
+    }
+
     function testFactoryInitializeProxy() public {
         address mockImplAddress = address(0x123);
         address defaultOwnerAddress = address(0x222);

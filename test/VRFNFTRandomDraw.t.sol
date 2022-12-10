@@ -57,6 +57,26 @@ contract VRFNFTRandomDrawTest is Test {
         subscriptionId = mockCoordinator.createSubscription();
     }
 
+    function test_Version() public {
+address sender = address(0x994);
+        IVRFNFTRandomDraw.Settings memory settings;
+        settings.drawBufferTime = 6000;
+        settings.recoverTimelock = 2 weeks;
+        settings.token = address(targetNFT);
+        settings.tokenId = 0;
+        settings.drawingTokenStartId = 0;
+        settings.drawingTokenEndId = 2;
+        settings.drawingToken = address(drawingNFT);
+        settings.subscriptionId = subscriptionId;
+
+        vm.prank(sender);
+        targetNFT.mint();
+
+        vm.prank(sender);
+        VRFNFTRandomDraw draw = VRFNFTRandomDraw(factory.makeNewDraw(settings));
+        assertEq(draw.contractVersion(), 1);
+    }
+
     function test_InvalidOptionTime() public {
         IVRFNFTRandomDraw.Settings memory settings;
         settings.drawBufferTime = 0;
