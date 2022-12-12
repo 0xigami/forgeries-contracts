@@ -67,6 +67,12 @@ contract OwnableTest is Test {
     assertEq(ownedContract.owner(), defaultOwner);
   }
 
+  function test_ResignOwnership() public {
+    vm.prank(defaultOwner);
+    ownedContract.resignOwnership();
+    assertEq(ownedContract.owner(), address(0));
+  }
+
   function test_TransferOwnershipSimple() public {
     address newOwner = address(0x99);
     assertEq(ownedContract.pendingOwner(), address(0x0));

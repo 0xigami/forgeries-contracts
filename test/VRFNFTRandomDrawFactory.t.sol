@@ -27,6 +27,12 @@ contract VRFNFTRandomDrawFactoryTest is Test {
         factory.initialize(address(0x222));
         assertEq(IOwnableUpgradeable(address(factory)).owner(), address(0x0));
     }
+    function testFactoryDoesNotAllowZeroAddressInitalization() public {
+        vm.expectRevert(IVRFNFTRandomDrawFactory.IMPL_ZERO_ADDRESS_NOT_ALLOWED.selector);
+        VRFNFTRandomDrawFactory factory = new VRFNFTRandomDrawFactory(
+            address(0)
+        );
+    }
 
     function testFactoryVersion() public {
         address mockImplAddress = address(0x123);
@@ -66,7 +72,7 @@ contract VRFNFTRandomDrawFactoryTest is Test {
             defaultOwnerAddress
         );
         vm.startPrank(newCreatorAddress);
-        // vm.expectRevert();
+        // While these address aren't correct they are only validated on init not creation.
         address result = IVRFNFTRandomDrawFactory(address(proxy)).makeNewDraw(
             IVRFNFTRandomDraw.Settings({
                 token: address(0),
@@ -82,4 +88,41 @@ contract VRFNFTRandomDrawFactoryTest is Test {
         );
         assertEq(result, address(0x9cC6334F1A7Bc20c9Dde91Db536E194865Af0067));
     }
+
+    function testFactoryUpgrade() public {
+        address mockChainlinkImplAddress = address(0x123);
+        address defaultOwnerAddress = address(0x222);
+        address newOwnerAddress = address(0x2199);
+        VRFNFTRandomDrawFactory factory = new VRFNFTRandomDrawFactory(
+            address(mockChainlinkImplAddress)
+        );
+
+        VRFNFTRandomDrawFactoryProxy proxy = new VRFNFTRandomDrawFactoryProxy(
+            address(factory),
+            defaultOwnerAddress
+        );
+        VRFNFTRandomDrawFactory factoryAccess = VRFNFTRandomDrawFactory(address(proxy));
+        vm.expectRevert();
+        factoryAccess.safeTransferOwnership(newOwnerAddress);
+
+        vm.prank(defaultOwnerAddress);
+        factoryAccess.safeTransferOwnership(newOwnerAddress);
+
+        vm.startPrank(newOwnerAddress);
+        factoryAccess.acceptOwnership();
+        assertEq(factoryAccess.owner(), newOwnerAddress);
+        address badNewImpl = address(0x1111);
+        // Fails with a bad new impl address
+        vm.expectRevert();
+        factoryAccess.upgradeTo(badNewImpl);
+        address newImpl = address(new VRFNFTRandomDrawFactory(address(mockChainlinkImplAddress)));
+        factoryAccess.upgradeTo(newImpl);
+        vm.stopPrank();
+
+        address newImpl2 = address(new VRFNFTRandomDrawFactory(address(mockChainlinkImplAddress)));
+        vm.prank(defaultOwnerAddress);
+        vm.expectRevert();
+        factoryAccess.upgradeTo(newImpl2);
+    }
+
 }

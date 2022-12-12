@@ -50,7 +50,7 @@ contract VRFNFTRandomDrawFactory is
         return newDrawing;
     }
 
-    /// @notice Allow sonly the owner to upgrade the contract
+    /// @notice Allows only the owner to upgrade the contract
     /// @param newImplementation proposed new upgrade implementation
     function _authorizeUpgrade(address newImplementation)
         internal
