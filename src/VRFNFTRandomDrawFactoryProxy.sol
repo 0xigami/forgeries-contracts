@@ -10,7 +10,6 @@ contract VRFNFTRandomDrawFactoryProxy is ERC1967Proxy {
     /// @param _logic underlying logic impl contract
     /// @param _defaultOwner initial owner of the underlying contract
     constructor(address _logic, address _defaultOwner)
-        payable
         ERC1967Proxy(
             _logic,
             abi.encodeWithSelector(
