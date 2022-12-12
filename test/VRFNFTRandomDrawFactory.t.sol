@@ -86,7 +86,6 @@ contract VRFNFTRandomDrawFactoryTest is Test {
                 subscriptionId: 0
             })
         );
-        assertEq(result, address(0x9cC6334F1A7Bc20c9Dde91Db536E194865Af0067));
     }
 
     function testFactoryUpgrade() public {
