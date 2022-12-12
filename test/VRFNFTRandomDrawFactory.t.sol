@@ -52,4 +52,34 @@ contract VRFNFTRandomDrawFactoryTest is Test {
             defaultOwnerAddress
         );
     }
+
+    function testFactoryAttemptsToSetupChildContract() public { 
+        address mockImplAddress = address(0x123);
+        address defaultOwnerAddress = address(0x222);
+        address newCreatorAddress = address(0x2312);
+        VRFNFTRandomDrawFactory factory = new VRFNFTRandomDrawFactory(
+            address(mockImplAddress)
+        );
+
+        VRFNFTRandomDrawFactoryProxy proxy = new VRFNFTRandomDrawFactoryProxy(
+            address(factory),
+            defaultOwnerAddress
+        );
+        vm.startPrank(newCreatorAddress);
+        // vm.expectRevert();
+        address result = IVRFNFTRandomDrawFactory(address(proxy)).makeNewDraw(
+            IVRFNFTRandomDraw.Settings({
+                token: address(0),
+                tokenId: 0,
+                drawingToken: address(0),
+                drawingTokenStartId: 0,
+                drawingTokenEndId: 0,
+                drawBufferTime: 0,
+                recoverTimelock: 0,
+                keyHash: bytes32(0),
+                subscriptionId: 0
+            })
+        );
+        assertEq(result, address(0x9cC6334F1A7Bc20c9Dde91Db536E194865Af0067));
+    }
 }
