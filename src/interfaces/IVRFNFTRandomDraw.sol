@@ -32,7 +32,7 @@ interface IVRFNFTRandomDraw {
     /// @notice When the range is [20,0] (from 20 to 0, that doesn't make sense)
     error DRAWING_TOKEN_RANGE_INVALID();
     /// @notice Withdraw timelock min is 1 hour
-    error REDRAW_TIMELOCK_NEEDS_TO_BE_MORE_THAN_AN_HOUR();
+    error REDRAW_TIMELOCK_NEEDS_TO_BE_MORE_THAN_A_DAY();
     error REDRAW_TIMELOCK_NEEDS_TO_BE_LESS_THAN_A_MONTH();
     /// @notice Admin NFT recovery timelock min is 1 week
     error RECOVER_TIMELOCK_NEEDS_TO_BE_AT_LEAST_A_WEEK();

@@ -88,8 +88,8 @@ contract VRFNFTRandomDraw is
 
     function _checkSettingsValid(Settings memory _settings) internal {
         // Check values in memory:
-        if (_settings.drawBufferTime < 1 hours) {
-            revert REDRAW_TIMELOCK_NEEDS_TO_BE_MORE_THAN_AN_HOUR();
+        if (_settings.drawBufferTime < 1 days) {
+            revert REDRAW_TIMELOCK_NEEDS_TO_BE_MORE_THAN_A_DAY();
         }
         if (_settings.drawBufferTime > 4 weeks) {
             revert REDRAW_TIMELOCK_NEEDS_TO_BE_LESS_THAN_A_MONTH();
@@ -98,7 +98,7 @@ contract VRFNFTRandomDraw is
         if (_settings.recoverBufferTime < 1 weeks) {
             revert RECOVER_TIMELOCK_NEEDS_TO_BE_AT_LEAST_A_WEEK();
         }
-        if (_settings.recoverBufferTime > (12 * 4 weeks)) {
+        if (_settings.recoverBufferTime > 1 years) {
             revert RECOVER_TIMELOCK_NEEDS_TO_BE_LESS_THAN_A_YEAR();
         }
 
