@@ -79,21 +79,20 @@ contract VRFNFTRandomDraw is
         // Set new settings
         settings = _settings;
 
+        
+    function _checkSettingsValid(Settings memory _settings) internal {
         // Check values in memory:
-        if (_settings.drawBufferTime < HOUR_IN_SECONDS) {
-            revert REDRAW_TIMELOCK_NEEDS_TO_BE_MORE_THAN_AN_HOUR();
+        if (_settings.drawBufferTime < 1 days) {
+            revert REDRAW_TIMELOCK_NEEDS_TO_BE_MORE_THAN_A_DAY();
         }
-        if (_settings.drawBufferTime > MONTH_IN_SECONDS) {
+        if (_settings.drawBufferTime > 4 weeks) {
             revert REDRAW_TIMELOCK_NEEDS_TO_BE_LESS_THAN_A_MONTH();
         }
 
-        if (_settings.recoverTimelock < block.timestamp + WEEK_IN_SECONDS) {
+        if (_settings.recoverTimelock < block.timestamp + 1 weeks) {
             revert RECOVER_TIMELOCK_NEEDS_TO_BE_AT_LEAST_A_WEEK();
         }
-        if (
-            _settings.recoverTimelock >
-            block.timestamp + (MONTH_IN_SECONDS * 12)
-        ) {
+        if (_settings.recoverTimelock > block.timestamp + 1 years) {
             revert RECOVER_TIMELOCK_NEEDS_TO_BE_LESS_THAN_A_YEAR();
         }
 
