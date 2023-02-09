@@ -15,7 +15,7 @@ contract VRFNFTRandomDrawFactory is
     IVRFNFTRandomDrawFactory,
     OwnableUpgradeable,
     UUPSUpgradeable,
-    Version(1)
+    Version(2)
 {
     /// @notice Implementation to clone of the raffle code
     address public immutable implementation;

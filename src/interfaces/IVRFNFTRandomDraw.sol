@@ -14,12 +14,17 @@ interface IVRFNFTRandomDraw {
     error TOKEN_NEEDS_TO_BE_APPROVED_TO_CONTRACT(address toApprove);
     /// @notice Waiting on a response from chainlink
     error REQUEST_IN_FLIGHT();
-    /// @notice Chainlink VRF response doesn't match current ID
-    error REQUEST_DOES_NOT_MATCH_CURRENT_ID();
     /// @notice The tokens' totalSupply doesn't match one claimed on contract
     error SUPPLY_TOKENS_COUNT_WRONG();
     /// @notice Cannot attempt to claim winnings if request is not started or in flight
     error NEEDS_TO_HAVE_CHOSEN_A_NUMBER();
+
+
+    /// @notice Too many / few random words are sent back from chainlink
+    error RANDOM_WORDS_WRONG_LENGTH();
+
+    /// @notice Emit event from chainlink request mismatch for another submission
+    event FULFILL_REQUEST_DOES_NOT_MATCH_CURRENT_ID();
 
     /// @notice Access to this function is not valid in finalized state
     error OnlyNotFinalized();
@@ -39,8 +44,6 @@ interface IVRFNFTRandomDraw {
     error TOO_SOON_TO_REDRAW();
     /// @notice NFT for raffle is not owned by the admin
     error DOES_NOT_OWN_NFT();
-    /// @notice Too many / few random words are sent back from chainlink
-    error WRONG_LENGTH_FOR_RANDOM_WORDS();
 
     error InvalidLINKWeiPrice();
 
@@ -72,8 +75,6 @@ interface IVRFNFTRandomDraw {
         bool hasChosenRandomNumber;
         /// @notice time lock (block.timestamp) that a re-draw can be issued
         uint64 drawTimelock;
-        /// @notice Set when draw is finalized
-        uint64 subscriptionId;
         /// @notice Set when draw is finalized
         uint64 finalizedAt;
         /// @notice block.timestamp that the admin can recover the NFT (as a safety fallback)

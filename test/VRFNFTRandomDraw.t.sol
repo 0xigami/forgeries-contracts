@@ -45,7 +45,7 @@ contract VRFNFTRandomDrawTest is Test {
         vm.label(address(linkTokens), "LINK");
 
         mockCoordinator = new ExtendedVRFCoordinatorV2Mock(
-            0.1 ether,
+            0.05 ether,
             1000,
             address(linkTokens)
         );
@@ -322,9 +322,9 @@ contract VRFNFTRandomDrawTest is Test {
         }
         vm.stopPrank();
 
-        vm.startPrank(admin);
-        targetNFT.mint();
+        _setupLinkAndNFTs(admin);
 
+        vm.startPrank(admin);
         (address consumerAddress, uint256 drawingId) = factory.makeNewDraw(
             IVRFNFTRandomDraw.Settings({
                 token: address(targetNFT),
@@ -366,9 +366,9 @@ contract VRFNFTRandomDrawTest is Test {
         }
         vm.stopPrank();
 
-        vm.startPrank(admin);
-        targetNFT.mint();
+        _setupLinkAndNFTs(admin);
 
+        vm.startPrank(admin);
         (address consumerAddress, uint256 drawingId) = factory.makeNewDraw(
             IVRFNFTRandomDraw.Settings({
                 token: address(targetNFT),
@@ -432,9 +432,9 @@ contract VRFNFTRandomDrawTest is Test {
         }
         vm.stopPrank();
 
-        vm.startPrank(admin);
-        targetNFT.mint();
+        _setupLinkAndNFTs(admin);
 
+        vm.prank(admin);
         (address consumerAddress, uint256 drawingId) = factory.makeNewDraw(
             IVRFNFTRandomDraw.Settings({
                 token: address(targetNFT),
@@ -449,8 +449,6 @@ contract VRFNFTRandomDrawTest is Test {
         vm.label(consumerAddress, "drawing instance");
 
         VRFNFTRandomDraw drawing = VRFNFTRandomDraw(consumerAddress);
-
-        vm.stopPrank();
 
         vm.prank(loser);
         vm.expectRevert(
@@ -499,6 +497,7 @@ contract VRFNFTRandomDrawTest is Test {
         vm.startPrank(admin);
         targetNFT.mint();
 
+        vm.expectRevert();
         (address consumerAddress, ) = factory.makeNewDraw(
             IVRFNFTRandomDraw.Settings({
                 token: address(targetNFT),
@@ -510,11 +509,5 @@ contract VRFNFTRandomDrawTest is Test {
                 recoverBufferTime: 2 weeks
             })
         );
-        vm.label(consumerAddress, "drawing instance");
-
-        VRFNFTRandomDraw drawing = VRFNFTRandomDraw(consumerAddress);
-
-        vm.expectRevert();
-        uint256 drawingId = drawing.redraw();
     }
 }
