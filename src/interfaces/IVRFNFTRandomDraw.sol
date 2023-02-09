@@ -42,12 +42,18 @@ interface IVRFNFTRandomDraw {
     /// @notice Too many / few random words are sent back from chainlink
     error WRONG_LENGTH_FOR_RANDOM_WORDS();
 
+    error InvalidKeyHash();
+
     error InvalidLINKWeiPrice();
+
+    error InvalidCoordinatorSetup();
 
     /// @notice Owner Reclaimed ERC20
     event OwnerReclaimedERC20(address owner, address token, uint256 balance);
     /// @notice When the draw is initialized
     event InitializedDraw(address indexed sender, Settings settings);
+    /// @notice User starts redraw
+    event RedrawRequested(address fromUser);
     /// @notice When the draw is setup
     event SetupDraw(address indexed sender, Settings settings);
     /// @notice When the owner reclaims nft aftr recovery time delay

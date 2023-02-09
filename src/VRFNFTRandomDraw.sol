@@ -20,11 +20,11 @@ contract VRFNFTRandomDraw is
     Version(2)
 {
     /// @notice Our callback is just setting a few variables, 200k should be more than enough gas.
-    uint32 immutable callbackGasLimit = 200_000;
+    uint32 constant callbackGasLimit = 200_000;
     // /// @notice Chainlink request confirmations, left at the default
-    uint16 immutable minimumRequestConfirmations = 3;
+    uint16 constant minimumRequestConfirmations = 3;
     /// @notice Number of words requested in a drawing
-    uint16 immutable wordsRequested = 1;
+    uint16 constant wordsRequested = 1;
 
     bytes32 immutable keyHash;
 
@@ -57,10 +57,19 @@ contract VRFNFTRandomDraw is
 
     /// @dev Save the coordinator to the contract
     /// @param _coordinator Address for VRF Coordinator V2 Interface
+    /// @param _keyHash Preset gas keyhash for given chain
     constructor(address _coordinator, bytes32 _keyHash)
         VRFConsumerBaseV2(_coordinator)
         initializer
     {
+        if (coordinator == address(0)) {
+            revert InvalidCoordinatorSetup();
+        }
+
+        if (keyHash == bytes32(0)) {
+            revert InvalidKeyHash();
+        }
+
         coordinator = VRFCoordinatorV2(_coordinator);
         keyHash = _keyHash;
     }
@@ -268,7 +277,6 @@ contract VRFNFTRandomDraw is
     /// @return chainlink request ID
     /// @dev Only callable by the owner
     function redraw() external onlyNotFinalized returns (uint256) {
-        
         if (request.drawTimelock >= block.timestamp) {
             revert TOO_SOON_TO_REDRAW();
         }
@@ -279,11 +287,9 @@ contract VRFNFTRandomDraw is
             revert REQUEST_IN_FLIGHT();
         }
 
-        // If the number has been drawn and
+        // If the number has been drawn and your re-draw timelock is locked, revert.
         if (
             request.hasChosenRandomNumber &&
-            // Draw timelock not yet used
-            request.drawTimelock != 0 &&
             request.drawTimelock > block.timestamp
         ) {
             revert STILL_IN_WAITING_PERIOD_BEFORE_REDRAWING();
@@ -294,6 +300,8 @@ contract VRFNFTRandomDraw is
 
         // Re-roll
         _requestRoll();
+
+        emit RedrawRequested(msg.sender);
 
         // Return current chainlink request ID
         return request.currentChainlinkRequestId;
