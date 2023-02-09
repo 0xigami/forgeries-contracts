@@ -15,10 +15,12 @@ contract VRFNFTRandomDrawFactory is
     IVRFNFTRandomDrawFactory,
     OwnableUpgradeable,
     UUPSUpgradeable,
-    Version(1)
+    Version(2)
 {
     /// @notice Implementation to clone of the raffle code
     address public immutable implementation;
+
+    mapping(address => uint256) public numberContractsByAddress;
 
     /// @notice Constructor to set the implementation
     constructor(address _implementation) initializer {
@@ -28,26 +30,53 @@ contract VRFNFTRandomDrawFactory is
         implementation = _implementation;
     }
 
-    function initialize(address _initialOwner) initializer external {
+    function initialize(address _initialOwner) external initializer {
         __Ownable_init(_initialOwner);
         emit SetupFactory();
+    }
+
+    function _keyForAdminAndId(address admin, uint256 id)
+        internal
+        returns (bytes32)
+    {
+        return keccak256(abi.encode(admin, id));
+    }
+
+    function getDrawingAddressById(address admin, uint256 id)
+        public
+        returns (address)
+    {
+        return
+            ClonesUpgradeable.predictDeterministicAddress(
+                implementation,
+                _keyForAdminAndId(admin, id),
+                address(this)
+            );
+    }
+
+    function getNextDrawingAddress(address admin) external returns (address) {
+        return getDrawingAddressById(admin, numberContractsByAddress[admin]);
     }
 
     /// @notice Function to make a new drawing
     /// @param settings settings for the new drawing
     function makeNewDraw(IVRFNFTRandomDraw.Settings memory settings)
         external
-        returns (address)
+        returns (address newDrawing, uint256 requestId)
     {
         address admin = msg.sender;
+
         // Clone the contract
-        address newDrawing = ClonesUpgradeable.clone(implementation);
+        newDrawing = ClonesUpgradeable.cloneDeterministic(
+            implementation,
+            _keyForAdminAndId(admin, numberContractsByAddress[admin]++)
+        );
+
         // Setup the new drawing
-        IVRFNFTRandomDraw(newDrawing).initialize(admin, settings);
+        requestId = IVRFNFTRandomDraw(newDrawing).initialize(admin, settings);
+
         // Emit event for indexing
         emit SetupNewDrawing(admin, newDrawing);
-        // Return address for integration or testing
-        return newDrawing;
     }
 
     /// @notice Allows only the owner to upgrade the contract

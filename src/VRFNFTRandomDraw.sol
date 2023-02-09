@@ -5,7 +5,8 @@ import {OwnableUpgradeable} from "./ownable/OwnableUpgradeable.sol";
 import {IERC721EnumerableUpgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/IERC721EnumerableUpgradeable.sol";
 
 import {VRFConsumerBaseV2} from "@chainlink/contracts/src/v0.8/VRFConsumerBaseV2.sol";
-import {VRFCoordinatorV2, VRFCoordinatorV2Interface} from "@chainlink/contracts/src/v0.8/VRFCoordinatorV2.sol";
+import {ExtendedVRFCoordinatorV2Interface} from "@chainlink/contracts/src/v0.8/VRFV2Wrapper.sol";
+import {LinkTokenInterface, VRFCoordinatorV2, VRFCoordinatorV2Interface} from "@chainlink/contracts/src/v0.8/VRFCoordinatorV2.sol";
 
 import {IVRFNFTRandomDraw} from "./interfaces/IVRFNFTRandomDraw.sol";
 import {Version} from "./utils/Version.sol";
@@ -16,25 +17,19 @@ contract VRFNFTRandomDraw is
     IVRFNFTRandomDraw,
     VRFConsumerBaseV2,
     OwnableUpgradeable,
-    Version(1)
+    Version(2)
 {
     /// @notice Our callback is just setting a few variables, 200k should be more than enough gas.
-    uint32 immutable callbackGasLimit = 200_000;
-    /// @notice Chainlink request confirmations, left at the default
-    uint16 immutable minimumRequestConfirmations = 3;
+    uint32 constant CALLBACK_GAS_LIMIT = 200_000;
+    // /// @notice Chainlink request confirmations, left at the default
+    uint16 constant REQUEST_CONFIRMATIONS = 3;
     /// @notice Number of words requested in a drawing
-    uint16 immutable wordsRequested = 1;
+    uint16 constant WORDS_REQUESTED = 1;
 
-    /// @dev 60 seconds in a min, 60 mins in an hour
-    uint256 immutable HOUR_IN_SECONDS = 60 * 60;
-    /// @dev 24 hours in a day 7 days in a week
-    uint256 immutable WEEK_IN_SECONDS = (3600 * 24 * 7);
-    // @dev about 30 days in a month
-    uint256 immutable MONTH_IN_SECONDS = (3600 * 24 * 7) * 30;
-
+    bytes32 immutable keyHash;
 
     /// @notice Reference to chain-specific coordinator contract
-    VRFCoordinatorV2Interface immutable coordinator;
+    VRFCoordinatorV2 immutable coordinator;
 
     /// @notice Settings used for the contract.
     IVRFNFTRandomDraw.Settings public settings;
@@ -42,13 +37,35 @@ contract VRFNFTRandomDraw is
     /// @notice Details about the current request to chainlink
     IVRFNFTRandomDraw.CurrentRequest public request;
 
+    /// @notice Contracts subscriptionId
+    uint64 public subscriptionId;
+
+    /// @dev Only when the contract is not finalized
+    modifier onlyNotFinalized() {
+        if (request.finalizedAt > 0) {
+            revert OnlyNotFinalized();
+        }
+        _;
+    }
+
+    /// @dev Recovery timelock gate
+    modifier onlyRecoveryTimelock() {
+        // If recoverTimelock is not setup, or if not yet occurred
+        if (request.recoverTimelock > block.timestamp) {
+            // Stop the withdraw
+            revert RECOVERY_IS_NOT_YET_POSSIBLE();
+        }
+        _;
+    }
+
     /// @dev Save the coordinator to the contract
     /// @param _coordinator Address for VRF Coordinator V2 Interface
-    constructor(VRFCoordinatorV2Interface _coordinator)
-        VRFConsumerBaseV2(address(_coordinator))
+    constructor(address _coordinator, bytes32 _keyHash)
+        VRFConsumerBaseV2(_coordinator)
         initializer
     {
-        coordinator = _coordinator;
+        coordinator = VRFCoordinatorV2(_coordinator);
+        keyHash = _keyHash;
     }
 
     /// @notice Getter for request details, does not include picked tokenID
@@ -69,17 +86,6 @@ contract VRFNFTRandomDraw is
         drawTimelock = request.drawTimelock;
     }
 
-    /// @notice Initialize the contract with settings and an admin
-    /// @param admin initial admin user
-    /// @param _settings initial settings for draw
-    function initialize(address admin, Settings memory _settings)
-        public
-        initializer
-    {
-        // Set new settings
-        settings = _settings;
-
-        
     function _checkSettingsValid(Settings memory _settings) internal {
         // Check values in memory:
         if (_settings.drawBufferTime < 1 days) {
@@ -89,10 +95,10 @@ contract VRFNFTRandomDraw is
             revert REDRAW_TIMELOCK_NEEDS_TO_BE_LESS_THAN_A_MONTH();
         }
 
-        if (_settings.recoverTimelock < block.timestamp + 1 weeks) {
+        if (_settings.recoverBufferTime < 1 weeks) {
             revert RECOVER_TIMELOCK_NEEDS_TO_BE_AT_LEAST_A_WEEK();
         }
-        if (_settings.recoverTimelock > block.timestamp + 1 years) {
+        if (_settings.recoverBufferTime > 365 days) {
             revert RECOVER_TIMELOCK_NEEDS_TO_BE_LESS_THAN_A_YEAR();
         }
 
@@ -114,94 +120,157 @@ contract VRFNFTRandomDraw is
         ) {
             revert DRAWING_TOKEN_RANGE_INVALID();
         }
+    }
 
-        // Setup owner as admin
-        __Ownable_init(admin);
-
-        // Emit initialized event for indexing
-        emit InitializedDraw(msg.sender, settings);
-
+    function _checkAndEscrowNFT(address token, uint256 tokenId) internal {
         // Get owner of raffled tokenId and ensure the current owner is the admin
-        try
-            IERC721EnumerableUpgradeable(_settings.token).ownerOf(
-                _settings.tokenId
-            )
-        returns (address nftOwner) {
-            // Check if address is the admin address
-            if (nftOwner != admin) {
-                revert DOES_NOT_OWN_NFT();
-            }
+        try IERC721EnumerableUpgradeable(token).ownerOf(tokenId) returns (
+            address nftOwner
+        ) {
+            // Escrow NFT
+            IERC721EnumerableUpgradeable(token).transferFrom(
+                nftOwner,
+                address(this),
+                tokenId
+            );
         } catch {
             revert TOKEN_BEING_OFFERED_NEEDS_TO_EXIST();
         }
     }
 
-    /// @notice Internal function to request entropy
-    function _requestRoll() internal {
-        // Chainlink request cannot be currently in flight.
-        // Request is cleared in re-roll if conditions are correct.
-        if (request.currentChainlinkRequestId != 0) {
-            revert REQUEST_IN_FLIGHT();
-        }
+    /// @notice Initialize the contract with settings and an admin
+    /// @param admin initial admin user
+    /// @param _settings initial settings for draw
+    function initialize(address admin, Settings memory _settings)
+        public
+        initializer
+        returns (uint256)
+    {
+        // Check if settings are valid
+        _checkSettingsValid(_settings);
 
-        // If the number has been drawn and
-        if (
-            request.hasChosenRandomNumber &&
-            // Draw timelock not yet used
-            request.drawTimelock != 0 &&
-            request.drawTimelock > block.timestamp
-        ) {
-            revert STILL_IN_WAITING_PERIOD_BEFORE_REDRAWING();
-        }
+        // Sets up chainlink subscription
+        subscriptionId = coordinator.createSubscription();
+        coordinator.addConsumer(subscriptionId, address(this));
 
-        // Setup re-draw timelock
-        request.drawTimelock = block.timestamp + settings.drawBufferTime;
+        // Saves new settings
+        settings = _settings;
 
-        // Request first random round
-        request.currentChainlinkRequestId = coordinator.requestRandomWords({
-            keyHash: settings.keyHash,
-            subId: settings.subscriptionId,
-            minimumRequestConfirmations: minimumRequestConfirmations,
-            callbackGasLimit: callbackGasLimit,
-            numWords: wordsRequested
-        });
-    }
+        // Setup owner as admin
+        __Ownable_init(admin);
 
-    /// @notice Call this to start the raffle drawing
-    /// @return chainlink request id
-    function startDraw() external onlyOwner returns (uint256) {
-        // Only can be called on first drawing
-        if (request.currentChainlinkRequestId != 0) {
-            revert REQUEST_IN_FLIGHT();
-        }
+        _checkAndEscrowNFT(_settings.token, _settings.tokenId);
 
-        // Emit setup draw user event
-        emit SetupDraw(msg.sender, settings);
+        // Emit initialized event for indexing
+        emit InitializedDraw(msg.sender, settings);
 
         // Request initial roll
         _requestRoll();
-
-        // Attempt to transfer token into this address
-        try
-            IERC721EnumerableUpgradeable(settings.token).transferFrom(
-                msg.sender,
-                address(this),
-                settings.tokenId
-            )
-        {} catch {
-            revert TOKEN_NEEDS_TO_BE_APPROVED_TO_CONTRACT();
-        }
 
         // Return the current chainlink request id
         return request.currentChainlinkRequestId;
     }
 
+    /// @notice Internal function to request entropy
+    function _requestRoll() internal {
+        unchecked {
+            // Setup redraw timelock
+            request.drawTimelock = uint64(
+                block.timestamp + settings.drawBufferTime
+            );
+            // Setup recover timelock
+            request.recoverTimelock = uint64(
+                block.timestamp + settings.recoverBufferTime
+            );
+        }
+
+        // Get the price in LINK
+        uint256 price = _calculateRequestPriceInternal();
+
+        // Calculate needed link
+        LinkTokenInterface link = VRFCoordinatorV2(address(coordinator)).LINK();
+        (uint256 subscriptionBalance, , , ) = coordinator.getSubscription(
+            subscriptionId
+        );
+        // Transfer needed link
+        if (price > subscriptionBalance) {
+            // Transfer from caller
+            link.transferFrom(
+                owner(),
+                address(this),
+                price - subscriptionBalance
+            );
+
+            // Fund subscription
+            link.transferAndCall(
+                address(coordinator),
+                price - subscriptionBalance,
+                abi.encode(subscriptionId)
+            );
+        }
+
+        // Request first random round
+        request.currentChainlinkRequestId = coordinator.requestRandomWords({
+            subId: subscriptionId,
+            keyHash: keyHash,
+            requestConfirmations: REQUEST_CONFIRMATIONS,
+            callbackGasLimit: CALLBACK_GAS_LIMIT,
+            numWords: WORDS_REQUESTED
+        });
+    }
+
+    function _calculateRequestPriceInternal()
+        internal
+        returns (uint256 feeWithFlatFee)
+    {
+        (, , uint32 stalenessSeconds, ) = coordinator.getConfig();
+        (uint32 fulfillmentFlatFeeLinkPPM, , , , , , , , ) = VRFCoordinatorV2(
+            address(coordinator)
+        ).getFeeConfig();
+
+        int256 fallbackWeiPerUnitLink = coordinator.getFallbackWeiPerUnitLink();
+
+        (, int256 weiPerUnitLink, , uint256 timestamp, ) = coordinator
+            .LINK_ETH_FEED()
+            .latestRoundData();
+        if (stalenessSeconds < block.timestamp - timestamp) {
+            weiPerUnitLink = fallbackWeiPerUnitLink;
+        }
+        if (weiPerUnitLink == 0) {
+            revert InvalidLINKWeiPrice();
+        }
+
+        uint256 coordinatorGasOverhead = 0;
+        uint256 baseFee = (1e18 *
+            tx.gasprice *
+            CALLBACK_GAS_LIMIT +
+            coordinatorGasOverhead) / uint256(weiPerUnitLink);
+
+        // TODO(iain): move to immutable constructor
+        uint256 wrapperPremiumPercentage = 25;
+
+        uint256 feeWithPremium = (baseFee * (wrapperPremiumPercentage + 100)) /
+            100;
+
+        feeWithFlatFee =
+            feeWithPremium +
+            (1e12 * uint256(fulfillmentFlatFeeLinkPPM));
+    }
+
+    function calculateRequestPrice() external returns (uint256) {
+        return _calculateRequestPriceInternal();
+    }
+
     /// @notice Call this to re-draw the raffle
     /// @return chainlink request ID
-    /// @dev Only callable by the owner
-    function redraw() external onlyOwner returns (uint256) {
+    function redraw() external onlyNotFinalized returns (uint256) {
         if (request.drawTimelock >= block.timestamp) {
             revert TOO_SOON_TO_REDRAW();
+        }
+
+        // TODO(iain): Do we need this check?
+        if (request.currentChainlinkRequestId != 0) {
+            revert REQUEST_IN_FLIGHT();
         }
 
         // Reset request
@@ -209,15 +278,6 @@ contract VRFNFTRandomDraw is
 
         // Re-roll
         _requestRoll();
-
-        // Owner of token to raffle needs to be this contract
-        if (
-            IERC721EnumerableUpgradeable(settings.token).ownerOf(
-                settings.tokenId
-            ) != address(this)
-        ) {
-            revert DOES_NOT_OWN_NFT();
-        }
 
         // Return current chainlink request ID
         return request.currentChainlinkRequestId;
@@ -232,13 +292,14 @@ contract VRFNFTRandomDraw is
     ) internal override {
         // Validate request ID
         if (_requestId != request.currentChainlinkRequestId) {
-            revert REQUEST_DOES_NOT_MATCH_CURRENT_ID();
+            emit FULFILL_REQUEST_DOES_NOT_MATCH_CURRENT_ID();
+            return;
         }
 
         // Validate number of words returned
         // Words requested is an immutable set to 1
-        if (_randomWords.length != wordsRequested) {
-            revert WRONG_LENGTH_FOR_RANDOM_WORDS();
+        if (_randomWords.length != WORDS_REQUESTED) {
+            revert RANDOM_WORDS_WRONG_LENGTH();
         }
 
         // Set request details
@@ -254,13 +315,21 @@ contract VRFNFTRandomDraw is
             (_randomWords[0] % tokenRange) +
             settings.drawingTokenStartId;
 
+        // Reset request Id
+        request.currentChainlinkRequestId = 0;
+
         // Emit completed event.
         emit DiceRollComplete(msg.sender, request);
     }
 
     /// @notice Function to determine if the user has won in the current drawing
     /// @param user address for the user to check if they have won in the current drawing
-    function hasUserWon(address user) public view returns (bool) {
+    function hasUserWon(address user)
+        public
+        view
+        onlyNotFinalized
+        returns (bool)
+    {
         if (!request.hasChosenRandomNumber) {
             revert NEEDS_TO_HAVE_CHOSEN_A_NUMBER();
         }
@@ -282,6 +351,10 @@ contract VRFNFTRandomDraw is
             revert USER_HAS_NOT_WON();
         }
 
+        unchecked {
+            request.finalizedAt = uint64(block.timestamp);
+        }
+
         // Emit a celebratory event
         emit WinnerSentNFT(
             user,
@@ -300,13 +373,11 @@ contract VRFNFTRandomDraw is
 
     /// @notice Optional last resort admin reclaim nft function
     /// @dev Only callable by the owner
-    function lastResortTimelockOwnerClaimNFT() external onlyOwner {
-        // If recoverTimelock is not setup, or if not yet occurred
-        if (settings.recoverTimelock > block.timestamp) {
-            // Stop the withdraw
-            revert RECOVERY_IS_NOT_YET_POSSIBLE();
-        }
-
+    function lastResortTimelockOwnerClaimNFT()
+        external
+        onlyOwner
+        onlyRecoveryTimelock
+    {
         // Send event for indexing that the owner reclaimed the NFT
         emit OwnerReclaimedNFT(owner());
 
@@ -316,5 +387,28 @@ contract VRFNFTRandomDraw is
             owner(),
             settings.tokenId
         );
+    }
+
+    /// @notice Token reclaim ERC20 – used for accidentally sent tokens and .
+    /// @param token token to reclaim address
+    function ownerReclaimERC20Tokens(address token)
+        external
+        onlyOwner
+        onlyRecoveryTimelock
+    {
+        // If recoverTimelock is not setup, or if not yet occurred
+        if (request.recoverTimelock > block.timestamp) {
+            // Stop the withdraw
+            revert RECOVERY_IS_NOT_YET_POSSIBLE();
+        }
+
+        address self = address(this);
+        uint256 balance = LinkTokenInterface(token).balanceOf(self);
+
+        emit OwnerReclaimedERC20(msg.sender, token, balance);
+
+        // While this function signature works for ERC20,
+        //  it is only able to be called after the draw.
+        LinkTokenInterface(token).transferFrom(self, owner(), balance);
     }
 }

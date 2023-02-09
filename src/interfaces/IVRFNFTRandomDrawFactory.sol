@@ -17,9 +17,15 @@ interface IVRFNFTRandomDrawFactory {
     /// @notice Emitted when the factory is setup
     event SetupFactory();
 
+    function getDrawingAddressById(address admin, uint256 id)
+        external
+        returns (address);
+
+    function getNextDrawingAddress(address admin) external returns (address);
+
     /// @notice Function to make a new drawing
     /// @param settings settings for the new drawing
     function makeNewDraw(IVRFNFTRandomDraw.Settings memory settings)
         external
-        returns (address);
+        returns (address, uint256);
 }
