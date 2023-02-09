@@ -76,7 +76,7 @@ contract VRFNFTRandomDrawTest is Test {
 
     function test_Version() public {
         IVRFNFTRandomDraw.Settings memory settings;
-        settings.drawBufferTime = 6000;
+        settings.drawBufferTime = 2 days;
         settings.recoverBufferTime = 2 weeks;
         settings.token = address(targetNFT);
         settings.tokenId = 0;
@@ -100,7 +100,7 @@ contract VRFNFTRandomDrawTest is Test {
         // invalid time for drawing
         vm.expectRevert(
             IVRFNFTRandomDraw
-                .REDRAW_TIMELOCK_NEEDS_TO_BE_MORE_THAN_AN_HOUR
+                .REDRAW_TIMELOCK_NEEDS_TO_BE_MORE_THAN_A_DAY
                 .selector
         );
         factory.makeNewDraw(settings);
@@ -130,8 +130,8 @@ contract VRFNFTRandomDrawTest is Test {
 
     function test_InvalidRecoverTimelock() public {
         VRFNFTRandomDraw.Settings memory settings;
-        settings.drawBufferTime = 6000;
-        settings.recoverBufferTime = 1000;
+        settings.drawBufferTime = 1 days;
+        settings.recoverBufferTime = 1 days;
         // recovery timelock too soon
         vm.expectRevert(
             IVRFNFTRandomDraw
@@ -143,8 +143,8 @@ contract VRFNFTRandomDrawTest is Test {
 
     function test_ZeroTokenContract() public {
         VRFNFTRandomDraw.Settings memory settings;
-        settings.drawBufferTime = 6000;
-        settings.recoverBufferTime = 604800;
+        settings.drawBufferTime = 2 days;
+        settings.recoverBufferTime = 4 weeks;
         // Token is not a contract
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -157,7 +157,7 @@ contract VRFNFTRandomDrawTest is Test {
 
     function test_NoTokenOwner() public {
         VRFNFTRandomDraw.Settings memory settings;
-        settings.drawBufferTime = 6000;
+        settings.drawBufferTime = 1 days;
         settings.recoverBufferTime = 2 weeks;
         settings.token = address(targetNFT);
         settings.drawingTokenStartId = 0;
@@ -175,7 +175,7 @@ contract VRFNFTRandomDrawTest is Test {
         address sender = address(0x994);
         vm.startPrank(sender);
         IVRFNFTRandomDraw.Settings memory settings;
-        settings.drawBufferTime = 6000;
+        settings.drawBufferTime = 1 days;
         settings.recoverBufferTime = 2 weeks;
         settings.token = address(targetNFT);
         settings.drawingToken = address(drawingNFT);
@@ -191,7 +191,7 @@ contract VRFNFTRandomDrawTest is Test {
     function test_TokenNotApproved() public {
         address sender = address(0x994);
         IVRFNFTRandomDraw.Settings memory settings;
-        settings.drawBufferTime = 6000;
+        settings.drawBufferTime = 1 days;
         settings.recoverBufferTime = 2 weeks;
         settings.token = address(targetNFT);
         settings.tokenId = 0;
@@ -225,7 +225,7 @@ contract VRFNFTRandomDrawTest is Test {
                 drawingToken: address(drawingNFT),
                 drawingTokenStartId: 0,
                 drawingTokenEndId: 10,
-                drawBufferTime: 1 hours,
+                drawBufferTime: 1 days,
                 recoverBufferTime: 2 weeks
             })
         );
@@ -265,7 +265,7 @@ contract VRFNFTRandomDrawTest is Test {
                 drawingToken: address(drawingNFT),
                 drawingTokenStartId: 0,
                 drawingTokenEndId: 10,
-                drawBufferTime: 1 hours,
+                drawBufferTime: 1 days,
                 recoverBufferTime: 2 weeks
             })
         );
@@ -332,7 +332,7 @@ contract VRFNFTRandomDrawTest is Test {
                 drawingToken: address(drawingNFT),
                 drawingTokenStartId: 0,
                 drawingTokenEndId: 10,
-                drawBufferTime: 1 hours,
+                drawBufferTime: 1 days,
                 recoverBufferTime: 2 weeks
             })
         );
@@ -376,7 +376,7 @@ contract VRFNFTRandomDrawTest is Test {
                 drawingToken: address(drawingNFT),
                 drawingTokenStartId: 0,
                 drawingTokenEndId: 10,
-                drawBufferTime: 1 hours,
+                drawBufferTime: 1 days,
                 recoverBufferTime: 2 weeks
             })
         );
@@ -389,13 +389,13 @@ contract VRFNFTRandomDrawTest is Test {
         mockCoordinator.fulfillRandomWords(drawingId, consumerAddress);
 
         (, , uint256 drawTimelock) = drawing.getRequestDetails();
-        assertEq(drawTimelock, 3601);
+        assertEq(drawTimelock, 86401);
         assertEq(block.timestamp, 1);
 
         vm.expectRevert(IVRFNFTRandomDraw.TOO_SOON_TO_REDRAW.selector);
         drawing.redraw();
 
-        vm.warp(2 hours);
+        vm.warp(2 days);
 
         drawingId = drawing.redraw();
 
@@ -442,7 +442,7 @@ contract VRFNFTRandomDrawTest is Test {
                 drawingToken: address(drawingNFT),
                 drawingTokenStartId: 0,
                 drawingTokenEndId: 10,
-                drawBufferTime: 1 hours,
+                drawBufferTime: 1 days,
                 recoverBufferTime: 2 weeks
             })
         );
@@ -505,7 +505,7 @@ contract VRFNFTRandomDrawTest is Test {
                 drawingToken: address(drawingNFT),
                 drawingTokenStartId: 0,
                 drawingTokenEndId: 10,
-                drawBufferTime: 1 hours,
+                drawBufferTime: 1 days,
                 recoverBufferTime: 2 weeks
             })
         );

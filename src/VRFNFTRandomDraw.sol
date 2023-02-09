@@ -98,7 +98,7 @@ contract VRFNFTRandomDraw is
         if (_settings.recoverBufferTime < 1 weeks) {
             revert RECOVER_TIMELOCK_NEEDS_TO_BE_AT_LEAST_A_WEEK();
         }
-        if (_settings.recoverBufferTime > 1 years) {
+        if (_settings.recoverBufferTime > 365 days) {
             revert RECOVER_TIMELOCK_NEEDS_TO_BE_LESS_THAN_A_YEAR();
         }
 
