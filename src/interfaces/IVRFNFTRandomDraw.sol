@@ -21,6 +21,9 @@ interface IVRFNFTRandomDraw {
     /// @notice Cannot attempt to claim winnings if request is not started or in flight
     error NEEDS_TO_HAVE_CHOSEN_A_NUMBER();
 
+    /// @notice Access to this function is not valid in finalized state
+    error OnlyNotFinalized();
+
     /// @notice When the range is [20,0] (from 20 to 0, that doesn't make sense)
     error DRAWING_TOKEN_RANGE_INVALID();
     /// @notice Withdraw timelock min is 1 hour
@@ -39,6 +42,8 @@ interface IVRFNFTRandomDraw {
     /// @notice Too many / few random words are sent back from chainlink
     error WRONG_LENGTH_FOR_RANDOM_WORDS();
 
+    /// @notice Owner Reclaimed ERC20
+    event OwnerReclaimedERC20(address owner, address token, uint256 balance);
     /// @notice When the draw is initialized
     event InitializedDraw(address indexed sender, Settings settings);
     /// @notice When the draw is setup
@@ -83,10 +88,10 @@ interface IVRFNFTRandomDraw {
         uint256 drawBufferTime;
         /// @notice block.timestamp that the admin can recover the NFT (as a safety fallback)
         uint256 recoverTimelock;
-        /// @notice Chainlink gas keyhash
-        bytes32 keyHash;
         /// @notice Chainlink subscription id
         uint64 subscriptionId;
+        /// @notice LINK token
+        address linkFundingSource;
     }
 
     /// @notice Initialize the contract with settings and an admin
