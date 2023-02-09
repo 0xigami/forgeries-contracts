@@ -4,7 +4,6 @@ pragma solidity 0.8.16;
 import "forge-std/Test.sol";
 import "forge-std/console2.sol";
 
-import {VRFCoordinatorV2Mock} from "@chainlink/contracts/src/v0.8/mocks/VRFCoordinatorV2Mock.sol";
 import {VRFCoordinatorV2} from "@chainlink/contracts/src/v0.8/VRFCoordinatorV2.sol";
 import {VRFNFTRandomDraw} from "../src/VRFNFTRandomDraw.sol";
 import {VRFNFTRandomDrawFactory} from "../src/VRFNFTRandomDrawFactory.sol";
@@ -19,26 +18,24 @@ import {IVRFNFTRandomDrawFactory} from "../src/interfaces/IVRFNFTRandomDrawFacto
 import {MockNFT} from "./mocks/MockNFT.sol";
 import {MockERC20} from "./mocks/MockERC20.sol";
 
+import {ExtendedVRFCoordinatorV2Mock} from "./mocks/ExtendedVRFCoordinatorV2Mock.sol";
+
 contract VRFNFTRandomDrawTest is Test {
     MockNFT targetNFT;
     MockNFT drawingNFT;
     MockERC20 linkTokens;
     VRFNFTRandomDrawFactory factory;
 
-    VRFCoordinatorV2Mock mockCoordinator;
+    ExtendedVRFCoordinatorV2Mock mockCoordinator;
 
     address user = address(0x2134);
     address admin = address(0x0132);
-
-    uint64 subscriptionId;
 
     VRFNFTRandomDraw currentDraw;
 
     function setUp() public {
         vm.label(user, "USER");
         vm.label(admin, "ADMIN");
-
-        subscriptionId = 1337;
 
         targetNFT = new MockNFT("target", "target");
         vm.label(address(targetNFT), "TargetNFT");
@@ -47,34 +44,54 @@ contract VRFNFTRandomDrawTest is Test {
         linkTokens = new MockERC20("link", "link");
         vm.label(address(linkTokens), "LINK");
 
-        mockCoordinator = new VRFCoordinatorV2Mock(0.1 ether, 1000);
+        mockCoordinator = new ExtendedVRFCoordinatorV2Mock(
+            0.1 ether,
+            1000,
+            address(linkTokens)
+        );
 
-        VRFNFTRandomDraw drawImpl = new VRFNFTRandomDraw(mockCoordinator);
+        VRFNFTRandomDraw drawImpl = new VRFNFTRandomDraw(
+            address(mockCoordinator),
+            bytes32(
+                0x79d3d8832d904592c0bf9818b621522c988bb8b0c05cdc3b15aea1b6e8db0c15
+            )
+        );
         // Unproxied/unowned factory
         factory = new VRFNFTRandomDrawFactory(address(drawImpl));
+    }
 
-        vm.prank(admin);
-        subscriptionId = mockCoordinator.createSubscription();
+    function _setupLinkAndNFTs(address setupUser) internal {
+        vm.startPrank(setupUser);
+        targetNFT.mint();
+
+        address newRaffleAddress = factory.getNextDrawingAddress(setupUser);
+
+        targetNFT.setApprovalForAll(newRaffleAddress, true);
+
+        linkTokens.mint(10 ether);
+        linkTokens.approve(newRaffleAddress, 10 ether);
+
+        vm.stopPrank();
     }
 
     function test_Version() public {
-address sender = address(0x994);
         IVRFNFTRandomDraw.Settings memory settings;
         settings.drawBufferTime = 6000;
-        settings.recoverTimelock = 2 weeks;
+        settings.recoverBufferTime = 2 weeks;
         settings.token = address(targetNFT);
         settings.tokenId = 0;
         settings.drawingTokenStartId = 0;
         settings.drawingTokenEndId = 2;
         settings.drawingToken = address(drawingNFT);
-        settings.subscriptionId = subscriptionId;
 
-        vm.prank(sender);
-        targetNFT.mint();
+        _setupLinkAndNFTs(user);
 
-        vm.prank(sender);
-        VRFNFTRandomDraw draw = VRFNFTRandomDraw(factory.makeNewDraw(settings));
-        assertEq(draw.contractVersion(), 1);
+        vm.prank(user);
+        (address drawAddress, ) = factory.makeNewDraw(settings);
+
+        VRFNFTRandomDraw draw = VRFNFTRandomDraw(drawAddress);
+
+        assertEq(draw.contractVersion(), 2);
     }
 
     function test_InvalidOptionTime() public {
@@ -89,9 +106,8 @@ address sender = address(0x994);
         factory.makeNewDraw(settings);
 
         // fix this issue
-        settings.drawBufferTime = 2 hours;
-        settings.recoverTimelock = block.timestamp + 1000;
-        
+        settings.drawBufferTime = 2 days;
+
         // recovery timelock too soon
         vm.expectRevert(
             IVRFNFTRandomDraw
@@ -101,11 +117,13 @@ address sender = address(0x994);
         factory.makeNewDraw(settings);
 
         // fix recovery issue
-        settings.drawBufferTime = 2 hours;
-        settings.recoverTimelock = 2 weeks;
-        
+        settings.recoverBufferTime = 2 weeks;
+
         vm.expectRevert(
-            abi.encodeWithSelector(IVRFNFTRandomDraw.TOKEN_NEEDS_TO_BE_A_CONTRACT.selector, address(0x0))
+            abi.encodeWithSelector(
+                IVRFNFTRandomDraw.TOKEN_NEEDS_TO_BE_A_CONTRACT.selector,
+                address(0x0)
+            )
         );
         factory.makeNewDraw(settings);
     }
@@ -113,7 +131,7 @@ address sender = address(0x994);
     function test_InvalidRecoverTimelock() public {
         VRFNFTRandomDraw.Settings memory settings;
         settings.drawBufferTime = 6000;
-        settings.recoverTimelock = 1000;
+        settings.recoverBufferTime = 1000;
         // recovery timelock too soon
         vm.expectRevert(
             IVRFNFTRandomDraw
@@ -126,23 +144,30 @@ address sender = address(0x994);
     function test_ZeroTokenContract() public {
         VRFNFTRandomDraw.Settings memory settings;
         settings.drawBufferTime = 6000;
-        settings.recoverTimelock = block.timestamp + 604800;
+        settings.recoverBufferTime = 604800;
         // Token is not a contract
-        vm.expectRevert(abi.encodeWithSelector(IVRFNFTRandomDraw.TOKEN_NEEDS_TO_BE_A_CONTRACT.selector, address(0x0)));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IVRFNFTRandomDraw.TOKEN_NEEDS_TO_BE_A_CONTRACT.selector,
+                address(0x0)
+            )
+        );
         factory.makeNewDraw(settings);
     }
 
     function test_NoTokenOwner() public {
         VRFNFTRandomDraw.Settings memory settings;
         settings.drawBufferTime = 6000;
-        settings.recoverTimelock = 2 weeks;
+        settings.recoverBufferTime = 2 weeks;
         settings.token = address(targetNFT);
         settings.drawingTokenStartId = 0;
         settings.drawingTokenEndId = 4;
         settings.drawingToken = address(drawingNFT);
 
         // recovery timelock too soon
-        vm.expectRevert(IVRFNFTRandomDraw.TOKEN_BEING_OFFERED_NEEDS_TO_EXIST.selector);
+        vm.expectRevert(
+            IVRFNFTRandomDraw.TOKEN_BEING_OFFERED_NEEDS_TO_EXIST.selector
+        );
         factory.makeNewDraw(settings);
     }
 
@@ -151,7 +176,7 @@ address sender = address(0x994);
         vm.startPrank(sender);
         IVRFNFTRandomDraw.Settings memory settings;
         settings.drawBufferTime = 6000;
-        settings.recoverTimelock = 2 weeks;
+        settings.recoverBufferTime = 2 weeks;
         settings.token = address(targetNFT);
         settings.drawingToken = address(drawingNFT);
         settings.tokenId = 0;
@@ -164,48 +189,36 @@ address sender = address(0x994);
     }
 
     function test_TokenNotApproved() public {
-       address sender = address(0x994);
+        address sender = address(0x994);
         IVRFNFTRandomDraw.Settings memory settings;
         settings.drawBufferTime = 6000;
-        settings.recoverTimelock = 2 weeks;
+        settings.recoverBufferTime = 2 weeks;
         settings.token = address(targetNFT);
         settings.tokenId = 0;
         settings.drawingTokenStartId = 0;
         settings.drawingTokenEndId = 2;
         settings.drawingToken = address(drawingNFT);
-        settings.subscriptionId = subscriptionId;
 
         vm.prank(sender);
         targetNFT.mint();
 
         vm.prank(sender);
-        IVRFNFTRandomDraw draw = VRFNFTRandomDraw(factory.makeNewDraw(settings));
-
-        vm.prank(admin);
-        mockCoordinator.addConsumer(subscriptionId, address(draw));
-        vm.prank(admin);
-        mockCoordinator.fundSubscription(subscriptionId, 100 ether);
-
-        // Token needs to be approved
-        vm.expectRevert(IVRFNFTRandomDraw.TOKEN_NEEDS_TO_BE_APPROVED_TO_CONTRACT.selector);
-        vm.prank(sender);
-        draw.startDraw();
+        vm.expectRevert("ERC721: caller is not token owner or approved");
+        factory.makeNewDraw(settings);
     }
 
     function test_CannotRerollInFlight() public {
         address winner = address(0x1337);
         vm.label(winner, "winner");
 
+        _setupLinkAndNFTs(winner);
+
         vm.startPrank(winner);
         for (uint256 tokensCount = 0; tokensCount < 10; tokensCount++) {
             drawingNFT.mint();
         }
-        vm.stopPrank();
 
-        vm.startPrank(admin);
-        targetNFT.mint();
-
-        address consumerAddress = factory.makeNewDraw(
+        (address consumerAddress, ) = factory.makeNewDraw(
             IVRFNFTRandomDraw.Settings({
                 token: address(targetNFT),
                 tokenId: 0,
@@ -213,31 +226,23 @@ address sender = address(0x994);
                 drawingTokenStartId: 0,
                 drawingTokenEndId: 10,
                 drawBufferTime: 1 hours,
-                recoverTimelock: 2 weeks,
-                keyHash: bytes32(
-                    0x79d3d8832d904592c0bf9818b621522c988bb8b0c05cdc3b15aea1b6e8db0c15
-                ),
-                subscriptionId: subscriptionId
+                recoverBufferTime: 2 weeks
             })
         );
         vm.label(consumerAddress, "drawing instance");
 
-        mockCoordinator.addConsumer(subscriptionId, consumerAddress);
-        mockCoordinator.fundSubscription(subscriptionId, 100 ether);
-
         VRFNFTRandomDraw drawing = VRFNFTRandomDraw(consumerAddress);
 
-        vm.expectRevert(IVRFNFTRandomDraw.TOKEN_NEEDS_TO_BE_APPROVED_TO_CONTRACT.selector);
-        drawing.startDraw();
+        vm.expectRevert(IVRFNFTRandomDraw.TOO_SOON_TO_REDRAW.selector);
+        drawing.redraw();
 
-        targetNFT.setApprovalForAll(consumerAddress, true);
-
-        uint256 drawingId = drawing.startDraw();
+        vm.warp(block.timestamp + 10 days);
 
         vm.expectRevert(IVRFNFTRandomDraw.REQUEST_IN_FLIGHT.selector);
-        drawing.startDraw();
-    }
+        drawing.redraw();
 
+        vm.stopPrank();
+    }
 
     function test_ValidateRequestID() public {
         address winner = address(0x1337);
@@ -249,10 +254,11 @@ address sender = address(0x994);
         }
         vm.stopPrank();
 
-        vm.startPrank(admin);
-        targetNFT.mint();
+        _setupLinkAndNFTs(admin);
 
-        address consumerAddress = factory.makeNewDraw(
+        vm.startPrank(admin);
+
+        (address consumerAddress, uint256 requestId) = factory.makeNewDraw(
             IVRFNFTRandomDraw.Settings({
                 token: address(targetNFT),
                 tokenId: 0,
@@ -260,42 +266,47 @@ address sender = address(0x994);
                 drawingTokenStartId: 0,
                 drawingTokenEndId: 10,
                 drawBufferTime: 1 hours,
-                recoverTimelock: 2 weeks,
-                keyHash: bytes32(
-                    0x79d3d8832d904592c0bf9818b621522c988bb8b0c05cdc3b15aea1b6e8db0c15
-                ),
-                subscriptionId: subscriptionId
+                recoverBufferTime: 2 weeks
             })
         );
         vm.label(consumerAddress, "drawing instance");
 
-        mockCoordinator.addConsumer(subscriptionId, consumerAddress);
-        mockCoordinator.fundSubscription(subscriptionId, 100 ether);
-
         vm.stopPrank();
         vm.prank(consumerAddress);
-        uint256 otherRequestId = VRFCoordinatorV2(address(mockCoordinator)).requestRandomWords({
-            keyHash: bytes32(0x79d3d8832d904592c0bf9818b621522c988bb8b0c05cdc3b15aea1b6e8db0c15),
-            subId: subscriptionId,
-            requestConfirmations: uint16(1),
-            callbackGasLimit: 100000,
-            numWords: 3
-        });
+        uint64 subId = IVRFNFTRandomDraw(consumerAddress).subscriptionId();
 
-        vm.startPrank(admin);
+        vm.prank(admin);
+        linkTokens.mint(10 ether);
+
+        vm.prank(admin);
+        linkTokens.transferAndCall(
+            address(mockCoordinator),
+            10 ether,
+            abi.encode(subId)
+        );
+
+        vm.prank(consumerAddress);
+        uint256 otherRequestId = VRFCoordinatorV2(address(mockCoordinator))
+            .requestRandomWords({
+                keyHash: bytes32(
+                    0x79d3d8832d904592c0bf9818b621522c988bb8b0c05cdc3b15aea1b6e8db0c15
+                ),
+                subId: subId,
+                requestConfirmations: uint16(1),
+                callbackGasLimit: 100000,
+                numWords: 3
+            });
 
         VRFNFTRandomDraw drawing = VRFNFTRandomDraw(consumerAddress);
 
-        targetNFT.setApprovalForAll(consumerAddress, true);
-
-        uint256 drawingId = drawing.startDraw();
-
+        vm.prank(address(drawing));
         mockCoordinator.fulfillRandomWords(otherRequestId, consumerAddress);
-        (uint256 requestId, bool hasChosenNumber, ) = drawing.getRequestDetails();
+        (uint256 requestIdResponse, bool hasChosenNumber, ) = drawing
+            .getRequestDetails();
         assert(!hasChosenNumber);
 
-        mockCoordinator.fulfillRandomWords(drawingId, consumerAddress);
-        (requestId, hasChosenNumber, ) = drawing.getRequestDetails();
+        mockCoordinator.fulfillRandomWords(requestId, consumerAddress);
+        (requestIdResponse, hasChosenNumber, ) = drawing.getRequestDetails();
         assert(hasChosenNumber);
 
         assertTrue(drawing.hasUserWon(winner));
@@ -314,7 +325,7 @@ address sender = address(0x994);
         vm.startPrank(admin);
         targetNFT.mint();
 
-        address consumerAddress = factory.makeNewDraw(
+        (address consumerAddress, uint256 drawingId) = factory.makeNewDraw(
             IVRFNFTRandomDraw.Settings({
                 token: address(targetNFT),
                 tokenId: 0,
@@ -322,23 +333,14 @@ address sender = address(0x994);
                 drawingTokenStartId: 0,
                 drawingTokenEndId: 10,
                 drawBufferTime: 1 hours,
-                recoverTimelock: 2 weeks,
-                keyHash: bytes32(
-                    0x79d3d8832d904592c0bf9818b621522c988bb8b0c05cdc3b15aea1b6e8db0c15
-                ),
-                subscriptionId: subscriptionId
+                recoverBufferTime: 2 weeks
             })
         );
         vm.label(consumerAddress, "drawing instance");
 
-        mockCoordinator.addConsumer(subscriptionId, consumerAddress);
-        mockCoordinator.fundSubscription(subscriptionId, 100 ether);
-
         VRFNFTRandomDraw drawing = VRFNFTRandomDraw(consumerAddress);
 
         targetNFT.setApprovalForAll(consumerAddress, true);
-
-        uint256 drawingId = drawing.startDraw();
 
         mockCoordinator.fulfillRandomWords(drawingId, consumerAddress);
 
@@ -367,7 +369,7 @@ address sender = address(0x994);
         vm.startPrank(admin);
         targetNFT.mint();
 
-        address consumerAddress = factory.makeNewDraw(
+        (address consumerAddress, uint256 drawingId) = factory.makeNewDraw(
             IVRFNFTRandomDraw.Settings({
                 token: address(targetNFT),
                 tokenId: 0,
@@ -375,23 +377,14 @@ address sender = address(0x994);
                 drawingTokenStartId: 0,
                 drawingTokenEndId: 10,
                 drawBufferTime: 1 hours,
-                recoverTimelock: 2 weeks,
-                keyHash: bytes32(
-                    0x79d3d8832d904592c0bf9818b621522c988bb8b0c05cdc3b15aea1b6e8db0c15
-                ),
-                subscriptionId: subscriptionId
+                recoverBufferTime: 2 weeks
             })
         );
         vm.label(consumerAddress, "drawing instance");
 
-        mockCoordinator.addConsumer(subscriptionId, consumerAddress);
-        mockCoordinator.fundSubscription(subscriptionId, 100 ether);
-
         VRFNFTRandomDraw drawing = VRFNFTRandomDraw(consumerAddress);
 
         targetNFT.setApprovalForAll(consumerAddress, true);
-
-        uint256 drawingId = drawing.startDraw();
 
         mockCoordinator.fulfillRandomWords(drawingId, consumerAddress);
 
@@ -442,7 +435,7 @@ address sender = address(0x994);
         vm.startPrank(admin);
         targetNFT.mint();
 
-        address consumerAddress = factory.makeNewDraw(
+        (address consumerAddress, uint256 drawingId) = factory.makeNewDraw(
             IVRFNFTRandomDraw.Settings({
                 token: address(targetNFT),
                 tokenId: 0,
@@ -450,31 +443,23 @@ address sender = address(0x994);
                 drawingTokenStartId: 0,
                 drawingTokenEndId: 10,
                 drawBufferTime: 1 hours,
-                recoverTimelock: 2 weeks,
-                keyHash: bytes32(
-                    0x79d3d8832d904592c0bf9818b621522c988bb8b0c05cdc3b15aea1b6e8db0c15
-                ),
-                subscriptionId: subscriptionId
+                recoverBufferTime: 2 weeks
             })
         );
         vm.label(consumerAddress, "drawing instance");
-
-        mockCoordinator.addConsumer(subscriptionId, consumerAddress);
-        mockCoordinator.fundSubscription(subscriptionId, 100 ether);
 
         VRFNFTRandomDraw drawing = VRFNFTRandomDraw(consumerAddress);
 
         vm.stopPrank();
 
         vm.prank(loser);
-        vm.expectRevert(IVRFNFTRandomDraw.NEEDS_TO_HAVE_CHOSEN_A_NUMBER.selector);
+        vm.expectRevert(
+            IVRFNFTRandomDraw.NEEDS_TO_HAVE_CHOSEN_A_NUMBER.selector
+        );
         drawing.winnerClaimNFT();
 
         vm.prank(admin);
         targetNFT.setApprovalForAll(consumerAddress, true);
-
-        vm.prank(admin);
-        uint256 drawingId = drawing.startDraw();
 
         vm.prank(loser);
         vm.expectRevert();
@@ -514,7 +499,7 @@ address sender = address(0x994);
         vm.startPrank(admin);
         targetNFT.mint();
 
-        address consumerAddress = factory.makeNewDraw(
+        (address consumerAddress, ) = factory.makeNewDraw(
             IVRFNFTRandomDraw.Settings({
                 token: address(targetNFT),
                 tokenId: 0,
@@ -522,21 +507,14 @@ address sender = address(0x994);
                 drawingTokenStartId: 0,
                 drawingTokenEndId: 10,
                 drawBufferTime: 1 hours,
-                recoverTimelock: 2 weeks,
-                keyHash: bytes32(
-                    0x79d3d8832d904592c0bf9818b621522c988bb8b0c05cdc3b15aea1b6e8db0c15
-                ),
-                subscriptionId: subscriptionId
+                recoverBufferTime: 2 weeks
             })
         );
         vm.label(consumerAddress, "drawing instance");
 
-        mockCoordinator.addConsumer(subscriptionId, consumerAddress);
-        mockCoordinator.fundSubscription(subscriptionId, 100 ether);
-
         VRFNFTRandomDraw drawing = VRFNFTRandomDraw(consumerAddress);
 
         vm.expectRevert();
-        uint256 drawingId = drawing.startDraw();
+        uint256 drawingId = drawing.redraw();
     }
 }

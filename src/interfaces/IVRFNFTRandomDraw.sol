@@ -11,7 +11,7 @@ interface IVRFNFTRandomDraw {
     /// @notice Token needs to be a contract when initializing
     error TOKEN_NEEDS_TO_BE_A_CONTRACT(address potentialTokenAddress);
     /// @notice Token needs to be approved to raffle contract
-    error TOKEN_NEEDS_TO_BE_APPROVED_TO_CONTRACT();
+    error TOKEN_NEEDS_TO_BE_APPROVED_TO_CONTRACT(address toApprove);
     /// @notice Waiting on a response from chainlink
     error REQUEST_IN_FLIGHT();
     /// @notice Chainlink VRF response doesn't match current ID
@@ -42,6 +42,8 @@ interface IVRFNFTRandomDraw {
     /// @notice Too many / few random words are sent back from chainlink
     error WRONG_LENGTH_FOR_RANDOM_WORDS();
 
+    error InvalidLINKWeiPrice();
+
     /// @notice Owner Reclaimed ERC20
     event OwnerReclaimedERC20(address owner, address token, uint256 balance);
     /// @notice When the draw is initialized
@@ -66,10 +68,16 @@ interface IVRFNFTRandomDraw {
         uint256 currentChainlinkRequestId;
         /// @notice current chosen random number
         uint256 currentChosenTokenId;
-        /// @notice has chosen a random number (in case random number = 0(in case random number = 0)(in case random number = 0)(in case random number = 0)(in case random number = 0)(in case random number = 0)(in case random number = 0)(in case random number = 0)(in case random number = 0))
+        /// @notice has chosen a random number (in case random number = 0)
         bool hasChosenRandomNumber;
         /// @notice time lock (block.timestamp) that a re-draw can be issued
-        uint256 drawTimelock;
+        uint64 drawTimelock;
+        /// @notice Set when draw is finalized
+        uint64 subscriptionId;
+        /// @notice Set when draw is finalized
+        uint64 finalizedAt;
+        /// @notice block.timestamp that the admin can recover the NFT (as a safety fallback)
+        uint64 recoverTimelock;
     }
 
     /// @notice Struct to organize user settings
@@ -85,23 +93,17 @@ interface IVRFNFTRandomDraw {
         /// @notice End token ID for the drawing (exclusive) (token ids 0 - 9 would be 10 in this field)
         uint256 drawingTokenEndId;
         /// @notice Draw buffer time – time until a re-drawing can occur if the selected user cannot or does not claim the NFT.
-        uint256 drawBufferTime;
-        /// @notice block.timestamp that the admin can recover the NFT (as a safety fallback)
-        uint256 recoverTimelock;
-        /// @notice Chainlink subscription id
-        uint64 subscriptionId;
-        /// @notice LINK token
-        address linkFundingSource;
+        uint64 drawBufferTime;
+        /// @notice Recovery buffer time after last draw
+        uint64 recoverBufferTime;
     }
 
     /// @notice Initialize the contract with settings and an admin
     /// @param admin initial admin user
     /// @param _settings initial settings for draw
-    function initialize(address admin, Settings memory _settings) external;
-
-    /// @notice Call this to start the raffle drawing
-    /// @return chainlink request id
-    function startDraw() external returns (uint256);
+    function initialize(address admin, Settings memory _settings)
+        external
+        returns (uint256);
 
     /// @notice Call this to re-draw the raffle
     /// @return chainlink request ID
@@ -118,6 +120,8 @@ interface IVRFNFTRandomDraw {
     /// @notice Optional last resort admin reclaim nft function
     /// @dev Only callable by the owner
     function lastResortTimelockOwnerClaimNFT() external;
+
+    function subscriptionId() external returns (uint64);
 
     /// @notice Getter for request details, does not include picked tokenID
     /// @return currentChainlinkRequestId Current Chainlink Request ID
