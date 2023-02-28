@@ -32,6 +32,7 @@ contract VRFNFTRandomDrawFactory is
 
     function initialize(address _initialOwner) external initializer {
         __Ownable_init(_initialOwner);
+        __UUPSUpgradeable_init();
         emit SetupFactory();
     }
 
@@ -65,6 +66,10 @@ contract VRFNFTRandomDrawFactory is
         returns (address newDrawing, uint256 requestId)
     {
         address admin = msg.sender;
+
+        // TODO
+        // Validate token range exists and ownership here?
+        // ownerOf(startTokenId) && ownerOf(endTokenId) != 0
 
         // Clone the contract
         newDrawing = ClonesUpgradeable.cloneDeterministic(

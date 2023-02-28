@@ -60,10 +60,19 @@ contract VRFNFTRandomDraw is
 
     /// @dev Save the coordinator to the contract
     /// @param _coordinator Address for VRF Coordinator V2 Interface
+    /// @param _keyHash Preset gas keyhash for given chain
     constructor(address _coordinator, bytes32 _keyHash)
         VRFConsumerBaseV2(_coordinator)
         initializer
     {
+        if (coordinator == address(0)) {
+            revert InvalidCoordinatorSetup();
+        }
+
+        if (keyHash == bytes32(0)) {
+            revert InvalidKeyHash();
+        }
+
         coordinator = VRFCoordinatorV2(_coordinator);
         keyHash = _keyHash;
     }
@@ -278,6 +287,8 @@ contract VRFNFTRandomDraw is
 
         // Re-roll
         _requestRoll();
+
+        emit RedrawRequested(msg.sender);
 
         // Return current chainlink request ID
         return request.currentChainlinkRequestId;
