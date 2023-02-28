@@ -407,12 +407,6 @@ contract VRFNFTRandomDraw is
         onlyOwner
         onlyRecoveryTimelock
     {
-        // If recoverTimelock is not setup, or if not yet occurred
-        if (request.recoverTimelock > block.timestamp) {
-            // Stop the withdraw
-            revert RECOVERY_IS_NOT_YET_POSSIBLE();
-        }
-
         address self = address(this);
         uint256 balance = LinkTokenInterface(token).balanceOf(self);
 
@@ -421,5 +415,9 @@ contract VRFNFTRandomDraw is
         // While this function signature works for ERC20,
         //  it is only able to be called after the draw.
         LinkTokenInterface(token).transferFrom(self, owner(), balance);
+    }
+
+    function ownerCloseSubscription() external onlyOwner onlyRecoveryTimeLock {
+        coordinator.recoverFunds(msg.sender);
     }
 }
