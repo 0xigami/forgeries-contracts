@@ -65,11 +65,11 @@ contract VRFNFTRandomDraw is
         VRFConsumerBaseV2(_coordinator)
         initializer
     {
-        if (coordinator == address(0)) {
+        if (address(_coordinator) == address(0)) {
             revert InvalidCoordinatorSetup();
         }
 
-        if (keyHash == bytes32(0)) {
+        if (_keyHash == bytes32(0)) {
             revert InvalidKeyHash();
         }
 
@@ -417,7 +417,7 @@ contract VRFNFTRandomDraw is
         LinkTokenInterface(token).transferFrom(self, owner(), balance);
     }
 
-    function ownerCloseSubscription() external onlyOwner onlyRecoveryTimeLock {
+    function ownerCloseSubscription() external onlyOwner onlyRecoveryTimelock {
         coordinator.recoverFunds(msg.sender);
     }
 }
