@@ -20,11 +20,11 @@ contract VRFNFTRandomDraw is
     Version(2)
 {
     /// @notice Our callback is just setting a few variables, 200k should be more than enough gas.
-    uint32 constant callbackGasLimit = 200_000;
+    uint32 constant CALLBACK_GAS_LIMIT = 200_000;
     // /// @notice Chainlink request confirmations, left at the default
-    uint16 constant minimumRequestConfirmations = 3;
+    uint16 constant REQUEST_CONFIRMATIONS = 3;
     /// @notice Number of words requested in a drawing
-    uint16 constant wordsRequested = 1;
+    uint16 constant WORDS_REQUESTED = 1;
 
     bytes32 immutable keyHash;
 
@@ -36,6 +36,9 @@ contract VRFNFTRandomDraw is
 
     /// @notice Details about the current request to chainlink
     IVRFNFTRandomDraw.CurrentRequest public request;
+
+    /// @notice Contracts subscriptionId
+    uint64 public subscriptionId;
 
     /// @dev Only when the contract is not finalized
     modifier onlyNotFinalized() {
@@ -92,17 +95,6 @@ contract VRFNFTRandomDraw is
         drawTimelock = request.drawTimelock;
     }
 
-    /// @notice Initialize the contract with settings and an admin
-    /// @param admin initial admin user
-    /// @param _settings initial settings for draw
-    function initialize(address admin, Settings memory _settings)
-        public
-        initializer
-    {
-        // Set new settings
-        settings = _settings;
-
-        
     function _checkSettingsValid(Settings memory _settings) internal {
         // Check values in memory:
         if (_settings.drawBufferTime < 1 days) {
@@ -115,7 +107,7 @@ contract VRFNFTRandomDraw is
         if (_settings.recoverBufferTime < 1 weeks) {
             revert RECOVER_TIMELOCK_NEEDS_TO_BE_AT_LEAST_A_WEEK();
         }
-        if (_settings.recoverBufferTime > (12 * 4 weeks)) {
+        if (_settings.recoverBufferTime > 365 days) {
             revert RECOVER_TIMELOCK_NEEDS_TO_BE_LESS_THAN_A_YEAR();
         }
 
@@ -167,8 +159,8 @@ contract VRFNFTRandomDraw is
         _checkSettingsValid(_settings);
 
         // Sets up chainlink subscription
-        request.subscriptionId = coordinator.createSubscription();
-        coordinator.addConsumer(request.subscriptionId, address(this));
+        subscriptionId = coordinator.createSubscription();
+        coordinator.addConsumer(subscriptionId, address(this));
 
         // Saves new settings
         settings = _settings;
@@ -188,14 +180,8 @@ contract VRFNFTRandomDraw is
         return request.currentChainlinkRequestId;
     }
 
-    function subscriptionId() external returns (uint64) {
-        return request.subscriptionId;
-    }
-
     /// @notice Internal function to request entropy
     function _requestRoll() internal {
-        uint64 subId = request.subscriptionId;
-
         unchecked {
             // Setup redraw timelock
             request.drawTimelock = uint64(
@@ -213,7 +199,7 @@ contract VRFNFTRandomDraw is
         // Calculate needed link
         LinkTokenInterface link = VRFCoordinatorV2(address(coordinator)).LINK();
         (uint256 subscriptionBalance, , , ) = coordinator.getSubscription(
-            subId
+            subscriptionId
         );
         // Transfer needed link
         if (price > subscriptionBalance) {
@@ -228,17 +214,17 @@ contract VRFNFTRandomDraw is
             link.transferAndCall(
                 address(coordinator),
                 price - subscriptionBalance,
-                abi.encode(subId)
+                abi.encode(subscriptionId)
             );
         }
 
         // Request first random round
         request.currentChainlinkRequestId = coordinator.requestRandomWords({
-            subId: subId,
+            subId: subscriptionId,
             keyHash: keyHash,
-            requestConfirmations: minimumRequestConfirmations,
-            callbackGasLimit: callbackGasLimit,
-            numWords: wordsRequested
+            requestConfirmations: REQUEST_CONFIRMATIONS,
+            callbackGasLimit: CALLBACK_GAS_LIMIT,
+            numWords: WORDS_REQUESTED
         });
     }
 
@@ -266,11 +252,11 @@ contract VRFNFTRandomDraw is
         uint256 coordinatorGasOverhead = 0;
         uint256 baseFee = (1e18 *
             tx.gasprice *
-            callbackGasLimit +
+            CALLBACK_GAS_LIMIT +
             coordinatorGasOverhead) / uint256(weiPerUnitLink);
 
         // TODO(iain): move to immutable constructor
-        uint256 wrapperPremiumPercentage = 15;
+        uint256 wrapperPremiumPercentage = 25;
 
         uint256 feeWithPremium = (baseFee * (wrapperPremiumPercentage + 100)) /
             100;
@@ -286,24 +272,14 @@ contract VRFNFTRandomDraw is
 
     /// @notice Call this to re-draw the raffle
     /// @return chainlink request ID
-    /// @dev Only callable by the owner
     function redraw() external onlyNotFinalized returns (uint256) {
         if (request.drawTimelock >= block.timestamp) {
             revert TOO_SOON_TO_REDRAW();
         }
 
-        // Chainlink request cannot be currently in flight.
-        // Request is cleared in re-roll if conditions are correct.
+        // TODO(iain): Do we need this check?
         if (request.currentChainlinkRequestId != 0) {
             revert REQUEST_IN_FLIGHT();
-        }
-
-        // If the number has been drawn and your re-draw timelock is locked, revert.
-        if (
-            request.hasChosenRandomNumber &&
-            request.drawTimelock > block.timestamp
-        ) {
-            revert STILL_IN_WAITING_PERIOD_BEFORE_REDRAWING();
         }
 
         // Reset request
@@ -327,13 +303,14 @@ contract VRFNFTRandomDraw is
     ) internal override {
         // Validate request ID
         if (_requestId != request.currentChainlinkRequestId) {
-            revert REQUEST_DOES_NOT_MATCH_CURRENT_ID();
+            emit FULFILL_REQUEST_DOES_NOT_MATCH_CURRENT_ID();
+            return;
         }
 
         // Validate number of words returned
         // Words requested is an immutable set to 1
-        if (_randomWords.length != wordsRequested) {
-            revert WRONG_LENGTH_FOR_RANDOM_WORDS();
+        if (_randomWords.length != WORDS_REQUESTED) {
+            revert RANDOM_WORDS_WRONG_LENGTH();
         }
 
         // Set request details
@@ -348,6 +325,9 @@ contract VRFNFTRandomDraw is
         request.currentChosenTokenId =
             (_randomWords[0] % tokenRange) +
             settings.drawingTokenStartId;
+
+        // Reset request Id
+        request.currentChainlinkRequestId = 0;
 
         // Emit completed event.
         emit DiceRollComplete(msg.sender, request);

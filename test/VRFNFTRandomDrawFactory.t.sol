@@ -42,7 +42,7 @@ contract VRFNFTRandomDrawFactoryTest is Test {
         VRFNFTRandomDrawFactory factory = new VRFNFTRandomDrawFactory(
             (mockImplAddress)
         );
-        assertEq(factory.contractVersion(), 1);
+        assertEq(factory.contractVersion(), 2);
     }
 
     function testFactoryInitializeProxy() public {
