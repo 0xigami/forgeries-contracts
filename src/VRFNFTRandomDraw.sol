@@ -92,10 +92,21 @@ contract VRFNFTRandomDraw is
         drawTimelock = request.drawTimelock;
     }
 
+    /// @notice Initialize the contract with settings and an admin
+    /// @param admin initial admin user
+    /// @param _settings initial settings for draw
+    function initialize(address admin, Settings memory _settings)
+        public
+        initializer
+    {
+        // Set new settings
+        settings = _settings;
+
+        
     function _checkSettingsValid(Settings memory _settings) internal {
         // Check values in memory:
-        if (_settings.drawBufferTime < 1 hours) {
-            revert REDRAW_TIMELOCK_NEEDS_TO_BE_MORE_THAN_AN_HOUR();
+        if (_settings.drawBufferTime < 1 days) {
+            revert REDRAW_TIMELOCK_NEEDS_TO_BE_MORE_THAN_A_DAY();
         }
         if (_settings.drawBufferTime > 4 weeks) {
             revert REDRAW_TIMELOCK_NEEDS_TO_BE_LESS_THAN_A_MONTH();
