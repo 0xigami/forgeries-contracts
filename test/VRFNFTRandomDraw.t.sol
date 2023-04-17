@@ -66,7 +66,7 @@ contract VRFNFTRandomDrawTest is Test {
 
         address newRaffleAddress = factory.getNextDrawingAddress(setupUser);
 
-        targetNFT.setApprovalForAll(newRaffleAddress, true);
+        targetNFT.setApprovalForAll(address(factory), true);
 
         linkTokens.mint(10 ether);
         linkTokens.approve(newRaffleAddress, 10 ether);
@@ -95,8 +95,12 @@ contract VRFNFTRandomDrawTest is Test {
     }
 
     function test_InvalidOptionTime() public {
+        targetNFT.mint();
+        targetNFT.setApprovalForAll(address(factory), true);
         IVRFNFTRandomDraw.Settings memory settings;
         settings.drawBufferTime = 0;
+        settings.token = address(targetNFT);
+        settings.tokenId = 0;
         // invalid time for drawing
         vm.expectRevert(
             IVRFNFTRandomDraw
@@ -119,18 +123,17 @@ contract VRFNFTRandomDrawTest is Test {
         // fix recovery issue
         settings.recoverBufferTime = 2 weeks;
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IVRFNFTRandomDraw.TOKEN_NEEDS_TO_BE_A_CONTRACT.selector,
-                address(0x0)
-            )
-        );
+        vm.expectRevert();
         factory.makeNewDraw(settings);
     }
 
     function test_InvalidRecoverTimelock() public {
+        targetNFT.mint();
+        targetNFT.setApprovalForAll(address(factory), true);
         VRFNFTRandomDraw.Settings memory settings;
         settings.drawBufferTime = 1 days;
+        settings.token = address(targetNFT);
+        settings.tokenId = 0;
         settings.recoverBufferTime = 1 days;
         // recovery timelock too soon
         vm.expectRevert(
@@ -146,12 +149,7 @@ contract VRFNFTRandomDrawTest is Test {
         settings.drawBufferTime = 2 days;
         settings.recoverBufferTime = 4 weeks;
         // Token is not a contract
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IVRFNFTRandomDraw.TOKEN_NEEDS_TO_BE_A_CONTRACT.selector,
-                address(0x0)
-            )
-        );
+        vm.expectRevert();
         factory.makeNewDraw(settings);
     }
 
@@ -164,10 +162,7 @@ contract VRFNFTRandomDrawTest is Test {
         settings.drawingTokenEndId = 4;
         settings.drawingToken = address(drawingNFT);
 
-        // recovery timelock too soon
-        vm.expectRevert(
-            IVRFNFTRandomDraw.TOKEN_BEING_OFFERED_NEEDS_TO_EXIST.selector
-        );
+        vm.expectRevert("ERC721: invalid token ID");
         factory.makeNewDraw(settings);
     }
 
@@ -182,6 +177,7 @@ contract VRFNFTRandomDrawTest is Test {
         settings.tokenId = 0;
         settings.drawingTokenStartId = 2;
         targetNFT.mint();
+        targetNFT.setApprovalForAll(address(factory), true);
 
         // recovery timelock too soon
         vm.expectRevert(IVRFNFTRandomDraw.DRAWING_TOKEN_RANGE_INVALID.selector);
@@ -201,6 +197,7 @@ contract VRFNFTRandomDrawTest is Test {
 
         vm.prank(sender);
         targetNFT.mint();
+        targetNFT.setApprovalForAll(address(factory), true);
 
         vm.prank(sender);
         vm.expectRevert("ERC721: caller is not token owner or approved");

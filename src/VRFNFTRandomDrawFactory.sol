@@ -38,6 +38,7 @@ contract VRFNFTRandomDrawFactory is
 
     function _keyForAdminAndId(address admin, uint256 id)
         internal
+        pure
         returns (bytes32)
     {
         return keccak256(abi.encode(admin, id));
@@ -45,6 +46,7 @@ contract VRFNFTRandomDrawFactory is
 
     function getDrawingAddressById(address admin, uint256 id)
         public
+        view
         returns (address)
     {
         return
@@ -55,7 +57,7 @@ contract VRFNFTRandomDrawFactory is
             );
     }
 
-    function getNextDrawingAddress(address admin) external returns (address) {
+    function getNextDrawingAddress(address admin) external view returns (address) {
         return getDrawingAddressById(admin, numberContractsByAddress[admin]);
     }
 
@@ -75,6 +77,13 @@ contract VRFNFTRandomDrawFactory is
         newDrawing = ClonesUpgradeable.cloneDeterministic(
             implementation,
             _keyForAdminAndId(admin, numberContractsByAddress[admin]++)
+        );
+
+        // Escrow NFT
+        IERC721EnumerableUpgradeable(settings.token).transferFrom(
+            msg.sender,
+            address(newDrawing),
+            settings.tokenId
         );
 
         // Setup the new drawing

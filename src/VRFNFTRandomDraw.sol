@@ -61,10 +61,10 @@ contract VRFNFTRandomDraw is
     /// @dev Save the coordinator to the contract
     /// @param _coordinator Address for VRF Coordinator V2 Interface
     /// @param _keyHash Preset gas keyhash for given chain
-    constructor(address _coordinator, bytes32 _keyHash)
-        VRFConsumerBaseV2(_coordinator)
-        initializer
-    {
+    constructor(
+        address _coordinator,
+        bytes32 _keyHash
+    ) VRFConsumerBaseV2(_coordinator) initializer {
         if (address(_coordinator) == address(0)) {
             revert InvalidCoordinatorSetup();
         }
@@ -136,12 +136,9 @@ contract VRFNFTRandomDraw is
         try IERC721EnumerableUpgradeable(token).ownerOf(tokenId) returns (
             address nftOwner
         ) {
-            // Escrow NFT
-            IERC721EnumerableUpgradeable(token).transferFrom(
-                nftOwner,
-                address(this),
-                tokenId
-            );
+            if (nftOwner != address(this)) {
+                revert TOKEN_BEING_OFFERED_NEEDS_TO_EXIST();
+            }
         } catch {
             revert TOKEN_BEING_OFFERED_NEEDS_TO_EXIST();
         }
@@ -150,11 +147,10 @@ contract VRFNFTRandomDraw is
     /// @notice Initialize the contract with settings and an admin
     /// @param admin initial admin user
     /// @param _settings initial settings for draw
-    function initialize(address admin, Settings memory _settings)
-        public
-        initializer
-        returns (uint256)
-    {
+    function initialize(
+        address admin,
+        Settings memory _settings
+    ) public initializer returns (uint256) {
         // Check if settings are valid
         _checkSettingsValid(_settings);
 
@@ -335,12 +331,9 @@ contract VRFNFTRandomDraw is
 
     /// @notice Function to determine if the user has won in the current drawing
     /// @param user address for the user to check if they have won in the current drawing
-    function hasUserWon(address user)
-        public
-        view
-        onlyNotFinalized
-        returns (bool)
-    {
+    function hasUserWon(
+        address user
+    ) public view onlyNotFinalized returns (bool) {
         if (!request.hasChosenRandomNumber) {
             revert NEEDS_TO_HAVE_CHOSEN_A_NUMBER();
         }
@@ -402,11 +395,9 @@ contract VRFNFTRandomDraw is
 
     /// @notice Token reclaim ERC20 – used for accidentally sent tokens and .
     /// @param token token to reclaim address
-    function ownerReclaimERC20Tokens(address token)
-        external
-        onlyOwner
-        onlyRecoveryTimelock
-    {
+    function ownerReclaimERC20Tokens(
+        address token
+    ) external onlyOwner onlyRecoveryTimelock {
         address self = address(this);
         uint256 balance = LinkTokenInterface(token).balanceOf(self);
 
