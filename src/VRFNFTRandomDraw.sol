@@ -17,12 +17,12 @@ contract VRFNFTRandomDraw is
     IVRFNFTRandomDraw,
     VRFConsumerBaseV2,
     OwnableUpgradeable,
-    Version(2)
+    Version(3)
 {
     /// @notice Our callback is just setting a few variables, 200k should be more than enough gas.
     uint32 constant CALLBACK_GAS_LIMIT = 200_000;
     // /// @notice Chainlink request confirmations, left at the default
-    uint16 constant REQUEST_CONFIRMATIONS = 3;
+    uint16 constant REQUEST_CONFIRMATIONS = 6;
     /// @notice Number of words requested in a drawing
     uint16 constant WORDS_REQUESTED = 1;
 
@@ -36,9 +36,6 @@ contract VRFNFTRandomDraw is
 
     /// @notice Details about the current request to chainlink
     IVRFNFTRandomDraw.CurrentRequest public request;
-
-    /// @notice Contracts subscriptionId
-    uint64 public subscriptionId;
 
     /// @dev Only when the contract is not finalized
     modifier onlyNotFinalized() {
@@ -193,7 +190,9 @@ contract VRFNFTRandomDraw is
         uint256 price = _calculateRequestPriceInternal();
 
         // Calculate needed link
-        LinkTokenInterface link = VRFCoordinatorV2(address(coordinator)).LINK();
+        LinkTokenInterface link = LinkTokenInterface(
+            VRFCoordinatorV2(address(coordinator)).LINK()
+        );
         (uint256 subscriptionBalance, , , ) = coordinator.getSubscription(
             subscriptionId
         );
@@ -224,10 +223,7 @@ contract VRFNFTRandomDraw is
         });
     }
 
-    function _calculateRequestPriceInternal()
-        internal
-        returns (uint256 feeWithFlatFee)
-    {
+    function _calculateRequestPriceInternal() internal returns (uint256) {
         (, , uint32 stalenessSeconds, ) = coordinator.getConfig();
         (uint32 fulfillmentFlatFeeLinkPPM, , , , , , , , ) = VRFCoordinatorV2(
             address(coordinator)
@@ -238,6 +234,7 @@ contract VRFNFTRandomDraw is
         (, int256 weiPerUnitLink, , uint256 timestamp, ) = coordinator
             .LINK_ETH_FEED()
             .latestRoundData();
+
         if (stalenessSeconds < block.timestamp - timestamp) {
             weiPerUnitLink = fallbackWeiPerUnitLink;
         }
@@ -245,21 +242,19 @@ contract VRFNFTRandomDraw is
             revert InvalidLINKWeiPrice();
         }
 
-        uint256 coordinatorGasOverhead = 0;
-        uint256 baseFee = (1e18 *
-            tx.gasprice *
-            CALLBACK_GAS_LIMIT +
-            coordinatorGasOverhead) / uint256(weiPerUnitLink);
+        uint256 coordinatorGasOverhead = 60_000;
+        uint256 gasLaneMaxPrice = 150000000000; // 150 gwei
+        uint256 wrapperPremiumPercentage = 12;
 
-        // TODO(iain): move to immutable constructor
-        uint256 wrapperPremiumPercentage = 25;
+        uint256 baseFee = (1e18 *
+            gasLaneMaxPrice *
+            (CALLBACK_GAS_LIMIT + coordinatorGasOverhead)) /
+            uint256(weiPerUnitLink);
 
         uint256 feeWithPremium = (baseFee * (wrapperPremiumPercentage + 100)) /
             100;
 
-        feeWithFlatFee =
-            feeWithPremium +
-            (1e12 * uint256(fulfillmentFlatFeeLinkPPM));
+        return feeWithPremium + (1e12 * uint256(fulfillmentFlatFeeLinkPPM));
     }
 
     function calculateRequestPrice() external returns (uint256) {
@@ -399,13 +394,15 @@ contract VRFNFTRandomDraw is
         address token
     ) external onlyOwner onlyRecoveryTimelock {
         address self = address(this);
-        uint256 balance = LinkTokenInterface(token).balanceOf(self);
+        LinkTokenInterface linkAddress = VRFCoordinatorV2(address(coordinator))
+            .LINK();
+        uint256 balance = linkAddress.balanceOf(self);
 
-        emit OwnerReclaimedERC20(msg.sender, token, balance);
+        emit OwnerReclaimedERC20(msg.sender, address(linkAddress), balance);
 
         // While this function signature works for ERC20,
         //  it is only able to be called after the draw.
-        LinkTokenInterface(token).transferFrom(self, owner(), balance);
+        linkAddress.transferFrom(self, owner(), balance);
     }
 
     function ownerCloseSubscription() external onlyOwner onlyRecoveryTimelock {
