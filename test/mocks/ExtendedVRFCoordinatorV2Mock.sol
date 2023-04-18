@@ -16,7 +16,7 @@ contract MockAggregatorResponse {
             uint80 answeredInRound
         )
     {
-        return (0, 10, 0, 0, 0);
+        return (0, 60000000000000000, 0, 0, 0);
     }
 }
 

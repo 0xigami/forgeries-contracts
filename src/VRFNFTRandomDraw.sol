@@ -11,6 +11,8 @@ import {LinkTokenInterface, VRFCoordinatorV2, VRFCoordinatorV2Interface} from "@
 import {IVRFNFTRandomDraw} from "./interfaces/IVRFNFTRandomDraw.sol";
 import {Version} from "./utils/Version.sol";
 
+
+
 /// @notice VRFNFTRandom Draw with NFT Tickets
 /// @author @isiain
 contract VRFNFTRandomDraw is
@@ -26,7 +28,11 @@ contract VRFNFTRandomDraw is
     /// @notice Number of words requested in a drawing
     uint16 constant WORDS_REQUESTED = 1;
 
+    /// @notice keyHash for chain.link gas lane
     bytes32 immutable keyHash;
+
+    /// @notice chain.link subscription id
+    uint64 public subscriptionId;
 
     /// @notice Reference to chain-specific coordinator contract
     VRFCoordinatorV2 immutable coordinator;
@@ -243,7 +249,7 @@ contract VRFNFTRandomDraw is
         }
 
         uint256 coordinatorGasOverhead = 60_000;
-        uint256 gasLaneMaxPrice = 150000000000; // 150 gwei
+        uint256 gasLaneMaxPrice = 200000000000; // 200 gwei
         uint256 wrapperPremiumPercentage = 12;
 
         uint256 baseFee = (1e18 *

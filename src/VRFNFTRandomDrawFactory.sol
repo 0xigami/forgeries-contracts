@@ -10,7 +10,7 @@ import {IVRFNFTRandomDraw} from "./interfaces/IVRFNFTRandomDraw.sol";
 import {Version} from "./utils/Version.sol";
 
 /// @notice VRFNFTRandom Draw with NFT Tickets Factory Implementation
-/// @author @isiain
+/// @author iainnash
 contract VRFNFTRandomDrawFactory is
     IVRFNFTRandomDrawFactory,
     OwnableUpgradeable,

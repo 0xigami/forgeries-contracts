@@ -45,7 +45,7 @@ contract VRFNFTRandomDrawTest is Test {
         vm.label(address(linkTokens), "LINK");
 
         mockCoordinator = new ExtendedVRFCoordinatorV2Mock(
-            0.05 ether,
+            250000,
             1000,
             address(linkTokens)
         );
@@ -68,8 +68,8 @@ contract VRFNFTRandomDrawTest is Test {
 
         targetNFT.setApprovalForAll(address(factory), true);
 
-        linkTokens.mint(10 ether);
-        linkTokens.approve(newRaffleAddress, 10 ether);
+        linkTokens.mint(200 ether);
+        linkTokens.approve(newRaffleAddress, 200 ether);
 
         vm.stopPrank();
     }
@@ -91,7 +91,7 @@ contract VRFNFTRandomDrawTest is Test {
 
         VRFNFTRandomDraw draw = VRFNFTRandomDraw(drawAddress);
 
-        assertEq(draw.contractVersion(), 2);
+        assertEq(draw.contractVersion(), 3);
     }
 
     function test_InvalidOptionTime() public {
@@ -273,7 +273,7 @@ contract VRFNFTRandomDrawTest is Test {
         uint64 subId = IVRFNFTRandomDraw(consumerAddress).subscriptionId();
 
         vm.prank(admin);
-        linkTokens.mint(10 ether);
+        linkTokens.mint(40 ether);
 
         vm.prank(admin);
         linkTokens.transferAndCall(
