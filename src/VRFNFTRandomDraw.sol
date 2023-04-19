@@ -411,7 +411,10 @@ contract VRFNFTRandomDraw is
         linkAddress.transferFrom(self, owner(), balance);
     }
 
-    function ownerCloseSubscription() external onlyOwner onlyRecoveryTimelock {
+    function ownerCloseSubscription() external onlyOwner  {
+        if (request.finalizedAt == 0) {
+            revert ONLY_ALLOWED_FINALIZED_DRAWS();
+        }
         coordinator.recoverFunds(msg.sender);
     }
 }

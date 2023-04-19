@@ -6,6 +6,8 @@ interface IVRFNFTRandomDraw {
     error STILL_IN_WAITING_PERIOD_BEFORE_REDRAWING();
     /// @notice Admin emergency withdraw can only happen once unlocked
     error RECOVERY_IS_NOT_YET_POSSIBLE();
+    /// @notice Action is only allowed for finalized draws
+    error ONLY_ALLOWED_FINALIZED_DRAWS();
     /// @notice Token that is offered does not exist with ownerOf
     error TOKEN_BEING_OFFERED_NEEDS_TO_EXIST();
     /// @notice Token needs to be a contract when initializing
